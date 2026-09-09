@@ -1,0 +1,4 @@
+interface:
+  display_name: "exord-init"
+  short_description: "Plan and safely initialize software project foundations"
+  default_prompt: "Use $exord-init to plan a safe project foundation before implementation."

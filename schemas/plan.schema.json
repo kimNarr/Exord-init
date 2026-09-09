@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://exord-init.dev/schema/plan-v1.json",
+  "title": "exord-init Setup Plan v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "plan_id", "target_fingerprint", "spec", "spec_sha256"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "plan_id": {"type": "string", "format": "uuid"},
+    "target_fingerprint": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "depth", "project_id", "target_identity_sha256", "target_fingerprint", "operations", "validation", "risk_summary"],
+      "properties": {
+        "mode": {"enum": ["CREATE", "ADOPT", "REINITIALIZE"]},
+        "depth": {"enum": ["QUICK", "CUSTOM"]},
+        "project_id": {"type": "string", "format": "uuid"},
+        "target_identity_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "target_fingerprint": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "operations": {"type": "array", "items": {"$ref": "#/$defs/operation"}},
+        "validation": {"type": "array", "items": {"$ref": "#/$defs/validation"}},
+        "risk_summary": {"$ref": "#/$defs/riskSummary"}
+      }
+    },
+    "spec_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+  },
+  "$defs": {
+    "operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "path", "template_id", "expected_sha256"],
+      "properties": {
+        "kind": {"const": "CREATE"},
+        "path": {"type": "string", "minLength": 1},
+        "template_id": {"type": "string", "minLength": 1},
+        "expected_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "path"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "path": {"type": "string"}
+      }
+    },
+    "riskSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["destructive_operations", "user_owned_files_touched", "outside_root_paths", "secret_warnings"],
+      "properties": {
+        "destructive_operations": {"type": "integer", "minimum": 0},
+        "user_owned_files_touched": {"type": "integer", "minimum": 0},
+        "outside_root_paths": {"type": "integer", "minimum": 0},
+        "secret_warnings": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

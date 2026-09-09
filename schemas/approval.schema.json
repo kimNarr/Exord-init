@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://exord-init.dev/schema/approval-v1.json",
+  "title": "exord-init Approval v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "run_id", "plan_id", "spec_sha256", "target_identity_sha256", "approved_action", "approved_at"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "run_id": {"type": "string", "format": "uuid"},
+    "plan_id": {"type": "string", "format": "uuid"},
+    "spec_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "target_identity_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "approved_action": {"const": "APPLY_CREATE"},
+    "approved_at": {"type": "string", "format": "date-time"}
+  }
+}

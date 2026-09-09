@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://exord-init.dev/schema/result-v1.json",
+  "title": "exord-init Result v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "command", "status", "code", "message_key", "changed", "warnings", "next_actions"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "command": {"enum": ["", "doctor", "plan", "apply"]},
+    "status": {"enum": ["OK", "BLOCKED", "FAILED"]},
+    "code": {"type": "string", "minLength": 1},
+    "message_key": {"type": "string", "minLength": 1},
+    "run_id": {"type": ["string", "null"]},
+    "plan_id": {"type": ["string", "null"]},
+    "spec_sha256": {"type": ["string", "null"]},
+    "changed": {"type": "boolean"},
+    "warnings": {"type": "array", "items": {"type": "string"}},
+    "next_actions": {"type": "array", "items": {"type": "string"}},
+    "data": {"type": ["object", "null"]}
+  }
+}

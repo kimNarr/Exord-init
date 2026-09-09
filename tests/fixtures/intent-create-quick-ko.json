@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "mode": "CREATE",
+  "depth": "QUICK",
+  "project_summary": "개인과 팀이 안전하게 프로젝트를 시작하도록 돕는 예제",
+  "documentation_language": "ko",
+  "supported_agents": ["codex", "claude", "gemini"]
+}

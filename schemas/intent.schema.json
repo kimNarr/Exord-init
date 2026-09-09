@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://exord-init.dev/schema/intent-v1.json",
+  "title": "exord-init SetupIntent v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "mode", "depth", "project_summary", "documentation_language", "supported_agents"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "mode": {"enum": ["CREATE", "ADOPT", "REINITIALIZE"]},
+    "depth": {"enum": ["QUICK", "CUSTOM"]},
+    "project_summary": {"type": "string", "minLength": 1, "maxLength": 2000},
+    "documentation_language": {"enum": ["en", "ko"]},
+    "supported_agents": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"enum": ["codex", "claude", "gemini"]}
+    }
+  }
+}

@@ -1,0 +1,36 @@
+import json
+import pathlib
+import unittest
+
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+
+class ContractTests(unittest.TestCase):
+    def test_all_schemas_are_valid_json_with_draft_marker(self):
+        schema_paths = sorted((ROOT / "schemas").glob("*.schema.json"))
+        self.assertEqual(len(schema_paths), 6)
+        for path in schema_paths:
+            schema = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(schema["$schema"], "https://json-schema.org/draft/2020-12/schema")
+            self.assertEqual(schema["type"], "object")
+
+    def test_skill_has_no_scaffold_todos(self):
+        skill = (ROOT / "skill" / "exord-init" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertNotIn("TODO", skill)
+        self.assertLess(len(skill.splitlines()), 200)
+
+    def test_project_agent_templates_stay_small(self):
+        templates = (ROOT / "skill" / "exord-init" / "assets" / "templates").glob("*/AGENTS.md.tmpl")
+        for path in templates:
+            content = path.read_bytes()
+            self.assertLessEqual(len(content), 16 * 1024)
+            self.assertLessEqual(len(content.splitlines()), 200)
+
+    def test_feedback_is_not_part_of_runtime_package(self):
+        runtime_files = list((ROOT / "skill" / "exord-init").rglob("*"))
+        self.assertFalse(any("feedback" in path.parts for path in runtime_files))
+
+
+if __name__ == "__main__":
+    unittest.main()

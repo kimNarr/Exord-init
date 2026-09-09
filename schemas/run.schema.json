@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://exord-init.dev/schema/run-v1.json",
+  "title": "exord-init Run Journal v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "run_id", "plan_id", "status", "stage", "spec_sha256", "operations", "started_at", "updated_at"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "run_id": {"type": "string", "format": "uuid"},
+    "plan_id": {"type": "string", "format": "uuid"},
+    "status": {"enum": ["ACTIVE", "BLOCKED", "FAILED", "RECOVERY_REQUIRED", "FINALIZED"]},
+    "stage": {"type": "string"},
+    "spec_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "operations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "status"],
+        "properties": {
+          "path": {"type": "string", "minLength": 1},
+          "status": {"enum": ["PENDING", "APPLYING", "APPLIED", "ROLLED_BACK"]}
+        }
+      }
+    },
+    "started_at": {"type": "string", "format": "date-time"},
+    "updated_at": {"type": "string", "format": "date-time"}
+  }
+}

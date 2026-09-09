@@ -1,0 +1,23 @@
+# Local execution state and generated outputs
+.tools/
+.exord-local/
+coverage.out
+*.test
+/exord-init
+/exord-init.exe
+__pycache__/
+*.py[cod]
+
+# Local planning history and review inputs
+/docs/planning/
+/docs/feedback/
+/docs/exord-init-improvement-backlog.md
+/docs/exord-init-review-v1_1.md
+/output/
+
+# Editor and operating-system noise
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/

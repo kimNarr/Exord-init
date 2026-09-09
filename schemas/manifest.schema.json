@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://exord-init.dev/schema/manifest-v1.json",
+  "title": "exord-init Manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "generator", "project_id", "settings", "managed_files"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "generator": {"type": "object"},
+    "project_id": {"type": "string", "format": "uuid"},
+    "settings": {"type": "object"},
+    "managed_files": {"type": "array"}
+  }
+}
