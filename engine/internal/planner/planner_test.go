@@ -2,6 +2,8 @@ package planner
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/kimNarr/Exord-init/engine/internal/protocol"
@@ -35,7 +37,7 @@ func TestRenderedManifestTracksManagedFilesButNotItself(t *testing.T) {
 		SchemaVersion: 1, Mode: "CREATE", Depth: "QUICK", ProjectSummary: "A test project",
 		DocumentationLanguage: "en", SupportedAgents: []string{"codex", "claude"},
 	}
-	files, err := renderedFiles(intent, "123e4567-e89b-42d3-a456-426614174000")
+	files, err := renderedFiles(intent, "123e4567-e89b-42d3-a456-426614174000", "ENABLED")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,5 +99,48 @@ func TestStableProjectIDProducesStableSpecHash(t *testing.T) {
 	}
 	if first.Plan.PlanID == second.Plan.PlanID {
 		t.Fatal("separate plan envelopes must retain unique plan IDs")
+	}
+}
+
+func TestBuildAdoptProposesOnlyMissingFilesAndClassifiesConflict(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("user rules\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	inspection, err := target.InspectAdopt(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	intent := protocol.SetupIntent{SchemaVersion: 1, Mode: "ADOPT", Depth: "QUICK", ProjectSummary: "adopt", DocumentationLanguage: "en", SupportedAgents: []string{"codex", "claude", "gemini"}}
+	plan, err := BuildAdopt(intent, inspection, "123e4567-e89b-42d3-a456-426614174000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Spec.AdoptAnalysis == nil {
+		t.Fatal("missing ADOPT analysis")
+	}
+	for _, operation := range plan.Spec.Operations {
+		if operation.Path == "AGENTS.md" {
+			t.Fatal("ADOPT proposed overwriting user-owned AGENTS.md")
+		}
+	}
+	foundConflict := false
+	for _, conflict := range plan.Spec.AdoptAnalysis.Conflicts {
+		if conflict.Path == "AGENTS.md" && conflict.Reason == "USER_OWNED" {
+			foundConflict = true
+		}
+	}
+	if !foundConflict {
+		t.Fatal("user-owned AGENTS.md conflict was not reported")
+	}
+	second, err := BuildAdopt(intent, inspection, "123e4567-e89b-42d3-a456-426614174000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.SpecSHA256 != second.SpecSHA256 {
+		t.Fatal("same ADOPT inspection and project identity produced different spec hashes")
+	}
+	if plan.PlanID == second.PlanID {
+		t.Fatal("separate ADOPT plan envelopes must retain unique plan IDs")
 	}
 }

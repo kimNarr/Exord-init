@@ -17,7 +17,7 @@ import (
 	"github.com/kimNarr/Exord-init/engine/internal/target"
 )
 
-var version = "0.2.0-dev"
+var version = "0.3.0-dev"
 
 const protocolVersion = 1
 
@@ -56,7 +56,7 @@ func runDoctor(args []string) {
 		SchemaVersion: 1, Command: "doctor", Status: "OK", Code: "OK", MessageKey: "doctor.ok",
 		Changed: false, Warnings: []string{},
 		NextActions: []string{"prepare a CREATE + QUICK intent", "run exord-init plan"},
-		Data:        map[string]any{"version": version, "protocol_version": protocolVersion, "goos": runtime.GOOS, "goarch": runtime.GOARCH, "capabilities": []string{"doctor", "plan:create-quick", "apply:create-quick"}},
+		Data:        map[string]any{"version": version, "protocol_version": protocolVersion, "goos": runtime.GOOS, "goarch": runtime.GOARCH, "capabilities": []string{"doctor", "plan:create-quick", "apply:create-quick", "plan:adopt-quick"}},
 	}
 	emit(result, 0)
 }
@@ -83,8 +83,15 @@ func runPlan(args []string) {
 	if err != nil {
 		emit(failure("plan", "INVALID_INTENT", "error.intent_invalid", err), 2)
 	}
-	if intent.Mode != "CREATE" || intent.Depth != "QUICK" {
-		emit(failure("plan", "UNSUPPORTED_CAPABILITY", "error.v02_scope", nil), 7)
+	if intent.Depth != "QUICK" {
+		emit(failure("plan", "UNSUPPORTED_CAPABILITY", "error.v03_scope", nil), 7)
+	}
+	if intent.Mode == "ADOPT" {
+		runAdoptPlan(intent, *targetPath)
+		return
+	}
+	if intent.Mode != "CREATE" {
+		emit(failure("plan", "UNSUPPORTED_CAPABILITY", "error.v03_scope", nil), 7)
 	}
 	inspection, err := target.InspectCreate(*targetPath)
 	if err != nil {
@@ -132,6 +139,64 @@ func runPlan(args []string) {
 			"plan":             plan,
 			"approval_request": map[string]any{"schema_version": 1, "run_id": runID, "plan_id": plan.PlanID, "spec_sha256": plan.SpecSHA256, "target_identity_sha256": plan.Spec.TargetIdentitySHA256, "approved_action": "APPLY_CREATE"},
 		},
+	}
+	emit(result, 0)
+}
+
+func runAdoptPlan(intent protocol.SetupIntent, targetPath string) {
+	inspection, err := target.InspectAdopt(targetPath)
+	if err != nil {
+		emit(failure("plan", "UNSUPPORTED_TARGET", "error.target_unsafe", err), 4)
+	}
+	if inspection.Git.Detected && (!inspection.Git.CLIAvailable || !inspection.Git.RootMatch || inspection.Git.Status == "INVALID_REPOSITORY" || inspection.Git.Status == "STATUS_UNAVAILABLE") {
+		emit(failure("plan", "UNSUPPORTED_TARGET", "error.git_state_unsafe", nil), 4)
+	}
+	projectID := inspection.ManifestProjectID
+	if projectID == "" {
+		projectRoot, err := state.ExternalProjectRoot(inspection.IdentitySHA256)
+		if err != nil {
+			emitStateError("plan", err)
+		}
+		lockID, err := id.UUID4()
+		if err != nil {
+			emit(failure("plan", "INTERNAL_ERROR", "error.run_id", err), 10)
+		}
+		lock, err := state.Acquire(projectRoot, lockID)
+		if err != nil {
+			emitStateError("plan", err)
+		}
+		projectID, err = state.ProjectID(projectRoot)
+		if err != nil {
+			_ = lock.Release()
+			emit(failure("plan", "INTERNAL_ERROR", "error.project_identity", err), 10)
+		}
+		if err := lock.Release(); err != nil {
+			emit(failure("plan", "INTERNAL_ERROR", "error.lock_release", err), 10)
+		}
+	}
+	plan, err := planner.BuildAdopt(intent, inspection, projectID)
+	if err != nil {
+		emit(failure("plan", "INTERNAL_ERROR", "error.plan_build", err), 10)
+	}
+	warnings := []string{"read-only ADOPT analysis; existing project files and Git state were not changed"}
+	if inspection.Inventory.SecretCandidates > 0 {
+		warnings = append(warnings, "possible secret-bearing files were detected; commit proposals must remain suspended until reviewed")
+	}
+	if inspection.Inventory.SecretScanLimited {
+		warnings = append(warnings, "secret content scanning reached a safety bound; commit proposals must remain suspended")
+	}
+	if inspection.Inventory.ExcludedDirectories > 0 || inspection.Inventory.UnhashedFiles > 0 {
+		warnings = append(warnings, "excluded dependency directories or files beyond hashing bounds were summarized without full content hashing")
+	}
+	if inspection.Inventory.NestedGitRepositories > 0 || inspection.Git.GitFile {
+		warnings = append(warnings, "nested Git or worktree boundaries were detected and left untouched")
+	}
+	result := protocol.Result{
+		SchemaVersion: 1, Command: "plan", Status: "OK", Code: "OK", MessageKey: "plan.adopt_ready",
+		PlanID: &plan.PlanID, SpecSHA256: &plan.SpecSHA256, Changed: false,
+		Warnings:    warnings,
+		NextActions: []string{"review inventory and Git/Task analysis", "classify every conflict as diff, skip, alternate path, keep, or review update", "prepare a new plan after resolving required choices"},
+		Data:        map[string]any{"inspection": inspection, "plan": plan},
 	}
 	emit(result, 0)
 }

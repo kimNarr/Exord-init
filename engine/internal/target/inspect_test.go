@@ -25,3 +25,13 @@ func TestInspectCreateRejectsUserOwnedEntry(t *testing.T) {
 		t.Fatal("expected rejection")
 	}
 }
+
+func TestSamePathUsesPlatformCaseSemantics(t *testing.T) {
+	equal := samePath(filepath.Join("root", "Project"), filepath.Join("root", "project"))
+	if filepath.Separator == '\\' && !equal {
+		t.Fatal("Windows paths should be compared case-insensitively")
+	}
+	if filepath.Separator != '\\' && equal {
+		t.Fatal("case-sensitive platform paths must not be folded")
+	}
+}

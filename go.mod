@@ -1,3 +1,5 @@
 module github.com/kimNarr/Exord-init
 
-go 1.25
+go 1.25.0
+
+require golang.org/x/text v0.41.0

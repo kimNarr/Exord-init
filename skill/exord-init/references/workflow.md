@@ -3,7 +3,7 @@
 ## Purpose selection
 
 - `CREATE`: only for an empty target or the documented harmless-entry allowlist.
-- `ADOPT`: preserve an existing project and propose non-destructive additions.
+- `ADOPT`: preserve an existing project and propose non-destructive additions. In v0.3, stop after read-only inventory, Git/Task analysis, and conflict classification.
 - `REINITIALIZE`: advanced flow; external verified backup is mandatory.
 
 Never change the selected purpose because inspection found unexpected files. Stop and ask the user to choose.

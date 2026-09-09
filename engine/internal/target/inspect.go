@@ -21,33 +21,9 @@ type Inspection struct {
 }
 
 func InspectCreate(path string) (Inspection, error) {
-	abs, err := filepath.Abs(path)
+	abs, resolved, err := resolveSafeRoot(path)
 	if err != nil {
 		return Inspection{}, err
-	}
-	info, err := os.Lstat(abs)
-	if err != nil {
-		return Inspection{}, err
-	}
-	if !info.IsDir() {
-		return Inspection{}, errors.New("target is not a directory")
-	}
-	if info.Mode()&os.ModeSymlink != 0 {
-		return Inspection{}, errors.New("symlink target is not supported")
-	}
-	resolved, err := filepath.EvalSymlinks(abs)
-	if err != nil {
-		return Inspection{}, err
-	}
-	if !samePath(abs, resolved) {
-		return Inspection{}, errors.New("target path traverses a symbolic link or junction")
-	}
-	volume := filepath.VolumeName(abs) + string(os.PathSeparator)
-	if samePath(abs, volume) {
-		return Inspection{}, errors.New("filesystem root is not a valid target")
-	}
-	if home, err := os.UserHomeDir(); err == nil && samePath(abs, home) {
-		return Inspection{}, errors.New("user home is not a valid target")
 	}
 	entries, err := os.ReadDir(abs)
 	if err != nil {
@@ -73,16 +49,56 @@ func InspectCreate(path string) (Inspection, error) {
 	sort.Strings(names)
 	sort.Strings(fingerprintEntries)
 	sum := sha256.Sum256([]byte(strings.Join(fingerprintEntries, "\x00")))
+	identity := targetIdentity(resolved)
+	return Inspection{Path: abs, IdentitySHA256: identity, Fingerprint: hex.EncodeToString(sum[:]), Entries: names}, nil
+}
+
+func resolveSafeRoot(path string) (string, string, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", "", err
+	}
+	info, err := os.Lstat(abs)
+	if err != nil {
+		return "", "", err
+	}
+	if !info.IsDir() {
+		return "", "", errors.New("target is not a directory")
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return "", "", errors.New("symlink target is not supported")
+	}
+	resolved, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		return "", "", err
+	}
+	if !samePath(abs, resolved) {
+		return "", "", errors.New("target path traverses a symbolic link or junction")
+	}
+	volume := filepath.VolumeName(abs) + string(os.PathSeparator)
+	if samePath(abs, volume) {
+		return "", "", errors.New("filesystem root is not a valid target")
+	}
+	if home, err := os.UserHomeDir(); err == nil && samePath(abs, home) {
+		return "", "", errors.New("user home is not a valid target")
+	}
+	return abs, resolved, nil
+}
+
+func targetIdentity(resolved string) string {
 	identityPath := filepath.ToSlash(filepath.Clean(resolved))
 	if filepath.Separator == '\\' {
 		identityPath = strings.ToLower(identityPath)
 	}
 	identity := sha256.Sum256([]byte(identityPath))
-	return Inspection{Path: abs, IdentitySHA256: hex.EncodeToString(identity[:]), Fingerprint: hex.EncodeToString(sum[:]), Entries: names}, nil
+	return hex.EncodeToString(identity[:])
 }
 
 func samePath(a, b string) bool {
 	aa := strings.TrimRight(filepath.Clean(a), `\/`)
 	bb := strings.TrimRight(filepath.Clean(b), `\/`)
-	return strings.EqualFold(aa, bb)
+	if filepath.Separator == '\\' {
+		return strings.EqualFold(aa, bb)
+	}
+	return aa == bb
 }

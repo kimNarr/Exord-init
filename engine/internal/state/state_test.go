@@ -90,3 +90,9 @@ func TestProjectIDIsRandomThenStable(t *testing.T) {
 		t.Fatalf("project identity was not stable: %q != %q", first, second)
 	}
 }
+
+func TestExternalProjectRootRejectsInvalidIdentity(t *testing.T) {
+	if _, err := ExternalProjectRoot("not-a-hash"); err == nil {
+		t.Fatal("expected invalid identity rejection")
+	}
+}

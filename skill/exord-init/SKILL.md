@@ -22,7 +22,12 @@ Establish a project foundation from product and architecture needs. Stop before 
 
 Run `exord-init doctor --json` before proposing an apply action. If the matching engine is unavailable or incompatible, continue discovery only and explain the verified installation requirement. Never perform the engine's filesystem duties with ad-hoc shell commands.
 
-The current v0.2 capability is `CREATE + QUICK` planning followed by plan-bound apply to an empty or allowlisted target. Reject `ADOPT`, `REINITIALIZE`, `CUSTOM`, and every unimplemented Git action explicitly; do not simulate success.
+The current v0.3 capability is:
+
+- `CREATE + QUICK`: planning followed by plan-bound apply to an empty or allowlisted target.
+- `ADOPT + QUICK`: read-only inventory, existing-guidance conflicts, Task classification, and local Git analysis. Review its proposals, but do not apply them; ADOPT apply is not implemented.
+
+Reject `REINITIALIZE`, `CUSTOM`, ADOPT apply, and every unimplemented Git action explicitly; do not simulate success. If ADOPT reports secret candidates or a limited secret scan, stop commit proposals until the user resolves the risk.
 
 Read [engine-contract.md](references/engine-contract.md) before invoking the engine. Read [safety.md](references/safety.md) whenever the target is non-empty, Git state is unusual, or any destructive option is discussed.
 

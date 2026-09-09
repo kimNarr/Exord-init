@@ -33,12 +33,11 @@ class SchemaValidationTests(unittest.TestCase):
         ).validate(instance)
 
     def test_intent_fixture_matches_schema(self):
-        intent = json.loads(
-            (ROOT / "tests" / "fixtures" / "intent-create-quick-ko.json").read_text(
-                encoding="utf-8"
+        for name in ["intent-create-quick-ko.json", "intent-adopt-quick-en.json"]:
+            intent = json.loads(
+                (ROOT / "tests" / "fixtures" / name).read_text(encoding="utf-8")
             )
-        )
-        self.validate(intent, "intent.schema.json")
+            self.validate(intent, "intent.schema.json")
 
     def test_all_schemas_match_their_metaschema(self):
         for path in sorted((ROOT / "schemas").glob("*.schema.json")):
@@ -113,6 +112,81 @@ class SchemaValidationTests(unittest.TestCase):
             if approval_path.exists():
                 approval_path.unlink()
             shutil.rmtree(target)
+
+    @unittest.skipUnless(os.environ.get("EXORD_INIT_BIN"), "set EXORD_INIT_BIN")
+    def test_binary_adopt_plan_is_schema_valid_and_target_read_only(self):
+        binary = os.environ["EXORD_INIT_BIN"]
+        intent = ROOT / "tests" / "fixtures" / "intent-adopt-quick-en.json"
+        local_temp = ROOT / ".tools" / "test-fixtures"
+        local_temp.mkdir(parents=True, exist_ok=True)
+        suffix = uuid.uuid4().hex
+        target = local_temp / f"adopt-{suffix}"
+        state_home = local_temp / f"adopt-state-{suffix}"
+        target.mkdir()
+        subprocess.run(
+            ["git", "-C", str(target), "init", "-b", "main"],
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+        (target / "src").mkdir()
+        (target / "src" / "main.go").write_text("package main\n", encoding="utf-8")
+        (target / "AGENTS.md").write_text("user-owned rules\n", encoding="utf-8")
+        before = sorted(
+            path.relative_to(target).as_posix()
+            for path in target.rglob("*")
+            if ".git" not in path.relative_to(target).parts
+        )
+        git_status_before = subprocess.run(
+            ["git", "-C", str(target), "status", "--porcelain=v1", "-z"],
+            check=True,
+            capture_output=True,
+        ).stdout
+        environment = os.environ.copy()
+        if os.name == "nt":
+            environment["LOCALAPPDATA"] = str(state_home)
+        else:
+            environment["XDG_STATE_HOME"] = str(state_home)
+        try:
+            completed = subprocess.run(
+                [binary, "plan", "--intent", str(intent), "--target", str(target), "--json"],
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                env=environment,
+            )
+            result = json.loads(completed.stdout)
+            self.validate(result, "result.schema.json")
+            self.validate(result["data"]["plan"], "plan.schema.json")
+            self.assertFalse(result["changed"])
+            self.assertIsNone(result["run_id"])
+            self.assertEqual(result["data"]["plan"]["spec"]["mode"], "ADOPT")
+            conflicts = result["data"]["plan"]["spec"]["adopt_analysis"]["conflicts"]
+            self.assertTrue(
+                any(item["path"] == "AGENTS.md" for item in conflicts)
+            )
+            after = sorted(
+                path.relative_to(target).as_posix()
+                for path in target.rglob("*")
+                if ".git" not in path.relative_to(target).parts
+            )
+            self.assertEqual(before, after)
+            self.assertEqual(
+                (target / "AGENTS.md").read_text(encoding="utf-8"),
+                "user-owned rules\n",
+            )
+            git_status_after = subprocess.run(
+                ["git", "-C", str(target), "status", "--porcelain=v1", "-z"],
+                check=True,
+                capture_output=True,
+            ).stdout
+            self.assertEqual(git_status_before, git_status_after)
+        finally:
+            shutil.rmtree(target)
+            if state_home.exists():
+                shutil.rmtree(state_home)
 
 
 if __name__ == "__main__":

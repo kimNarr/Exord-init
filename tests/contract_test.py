@@ -39,6 +39,7 @@ class ContractTests(unittest.TestCase):
         for content in readmes:
             for required in [
                 "CREATE + QUICK",
+                "ADOPT + QUICK",
                 "doctor --json",
                 "APPLY_CREATE",
                 "spec_sha256",

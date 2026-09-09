@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "mode": "ADOPT",
+  "depth": "QUICK",
+  "project_summary": "Adopt an existing project without changing user-owned files",
+  "documentation_language": "en",
+  "supported_agents": ["codex", "claude", "gemini"]
+}

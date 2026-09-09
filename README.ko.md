@@ -8,7 +8,7 @@
 
 이 프로젝트 자체도 바이브코딩 방식으로 개발하고 있습니다. 사용자가 제품 방향과 안전 관련 결정을 주도하고 AI 코딩 에이전트가 조사, 설계, 구현, 리뷰와 테스트를 지원합니다. 여기서 바이브코딩은 검증을 생략한다는 뜻이 아닙니다. 명시적인 계약, plan-bound 승인, 자동화 테스트와 사용자 리뷰를 통해 AI가 생성한 변경을 추적하고 검증합니다.
 
-> 개발 상태: **v0.2 프로토타입**. 아직 안정 릴리스나 공식 설치 프로그램은 없습니다. 현재 엔진은 아래에 설명된 안전한 `CREATE + QUICK` 세로 슬라이스만 구현합니다.
+> 개발 상태: **v0.3 프로토타입**. 아직 안정 릴리스나 공식 설치 프로그램은 없습니다. 현재 엔진은 안전한 `CREATE + QUICK` 적용과 읽기 전용 `ADOPT + QUICK` 분석을 지원합니다.
 
 ## 만드는 이유
 
@@ -26,7 +26,7 @@ AI를 활용해 프로젝트를 시작하면 제품 경계를 이해하기 전�
 
 ## 현재 지원 범위
 
-| 영역 | v0.2 상태 |
+| 영역 | v0.3 상태 |
 |---|---|
 | `doctor`와 프로토콜 handshake | 구현됨 |
 | `CREATE + QUICK` 계획 | 구현됨 |
@@ -35,8 +35,9 @@ AI를 활용해 프로젝트를 시작하면 제품 경계를 이해하기 전�
 | 대상 재검사, 해시, 잠금, journal과 rollback | 구현됨 |
 | 영어 및 한국어 생성 문서 | 구현됨 |
 | Codex, Claude Code, Gemini CLI용 문서 대상 | 구현됨 |
-| `ADOPT`, `CUSTOM`, `REINITIALIZE` | 미구현 |
-| Task 및 Git workflow 생성 | 계획됨, v0.2에서는 생성하지 않음 |
+| 읽기 전용 `ADOPT + QUICK` inventory 및 충돌 계획 | 구현됨 |
+| `CUSTOM`, `REINITIALIZE`, ADOPT apply | 미구현 |
+| Task 및 Git 분석 | ADOPT에서 구현됨, 생성 기능은 계획 단계 |
 | commit, branch, remote와 push 자동화 | 미구현 |
 | 제품별 plugin 및 extension package | 미배포 |
 
@@ -89,7 +90,7 @@ go build -trimpath -o .\bin\exord-init.exe .\engine\cmd\exord-init
 .\bin\exord-init.exe doctor --json
 ```
 
-`doctor` 결과에서 protocol version `1`, `plan:create-quick`, `apply:create-quick` capability를 확인할 수 있어야 합니다.
+`doctor` 결과에서 protocol version `1`, `plan:create-quick`, `apply:create-quick`, `plan:adopt-quick` capability를 확인할 수 있어야 합니다.
 
 ## 빠른 시작: `CREATE + QUICK`
 
@@ -169,6 +170,20 @@ mkdir ../my-project
 
 성공하면 생성된 모든 파일을 검증하고 완료된 run bundle을 제거합니다. 실패하면 현재 run이 생성했고 해시가 바뀌지 않은 파일만 rollback합니다. 완전히 복구할 수 없는 상태는 검사를 위해 보존합니다.
 
+## 기존 프로젝트 읽기 전용 분석: `ADOPT + QUICK`
+
+SetupIntent의 `mode`를 `ADOPT`로 지정하고 기존 프로젝트에 동일한 `plan` 명령을 실행합니다. v0.3은 파일을 변경하거나 apply용으로 staging하지 않으며 다음 내용을 보고합니다.
+
+- 전체 파일 목록을 노출하지 않는 bounded inventory 수치
+- NFC 정규화 경로를 사용하는 content fingerprint와 명시적인 해시·검사 제한
+- 로컬 Git root, branch, HEAD, dirty 상태, untracked 수, worktree 표식과 진행 중 작업
+- 기존 `TASK.md` 분류와 충돌 시 기본 대체 경로인 `.exord/TASK.md`
+- 알려진 지침 파일의 소유 상태
+- 누락 파일의 CREATE-only 후보와 모든 충돌의 해결 선택지
+- 검출 값을 출력하지 않는 비밀 가능성 수치
+
+검사기는 `.git`, 의존성 cache, symlink와 중첩 저장소를 따라가지 않습니다. Git 검사는 optional lock과 외부 fsmonitor를 비활성화하고 네트워크 작업을 수행하지 않습니다. 비밀 가능성이 있거나 검사가 안전 한도에 도달하면 사용자가 검토할 때까지 commit 제안을 중단해야 합니다.
+
 ## 생성되는 프로젝트 파일
 
 현재 QUICK 흐름은 영구 최소 파일과 요청한 연결 문서만 생성합니다.
@@ -181,9 +196,9 @@ CLAUDE.md              요청한 경우 생성하는 얇은 Claude Code 연결 �
 GEMINI.md              요청한 경우 생성하는 얇은 Gemini CLI 연결 문서
 ```
 
-`CLAUDE.md`와 `GEMINI.md`는 전체 프로젝트 규칙을 복제하지 않고 기준 문서인 `AGENTS.md`를 참조합니다. 아키텍처 계층 문서와 `TASK.md`는 조건부 후속 결과물이며 v0.2에서는 생성하지 않습니다.
+`CLAUDE.md`와 `GEMINI.md`는 전체 프로젝트 규칙을 복제하지 않고 기준 문서인 `AGENTS.md`를 참조합니다. 아키텍처 계층 문서와 `TASK.md`는 조건부 후속 결과물이며 현재 v0.3 QUICK 흐름에서는 생성하지 않습니다.
 
-## v0.2 안전 보장
+## v0.3 안전 보장
 
 - QUICK은 질문 수만 줄이며 안전 검사를 줄이지 않습니다.
 - 기존 사용자 파일을 덮어쓰지 않습니다.
@@ -195,6 +210,7 @@ GEMINI.md              요청한 경우 생성하는 얇은 Gemini CLI 연결 �
 - 실패 및 복구 필요 run 상태를 보존합니다.
 - 엔진은 commit, push, branch 변경, Git 이력 삭제 또는 telemetry 전송을 수행하지 않습니다.
 - `REINITIALIZE`와 영구 삭제는 비활성화 상태입니다.
+- ADOPT는 분석 전용이며 v0.3에서 apply할 수 없습니다.
 
 자세한 공개 경계는 [안전 계약](docs/spec/safety.md)과 [프로토콜 계약](docs/spec/protocol.md)을 참고하세요.
 
@@ -255,7 +271,7 @@ EXORD_INIT_BIN=./bin/exord-init python -m unittest discover -s tests -p '*_test.
 위험이 낮은 순서에 따른 구현 계획은 다음과 같습니다.
 
 1. v0.2: 안전한 `CREATE + QUICK` plan-bound apply — 구현됨
-2. v0.3: 읽기 전용 `ADOPT` inventory, 충돌 분석, Task 및 Git 분석
+2. v0.3: 읽기 전용 `ADOPT` inventory, 충돌 분석, Task 및 Git 분석 — 구현됨
 3. v0.4: 복구 명령, upgrade 동작과 fault injection
 4. 이후: 검증된 외부 백업과 별도 파괴적 승인을 요구하는 `REINITIALIZE`
 
@@ -266,6 +282,8 @@ EXORD_INIT_BIN=./bin/exord-init python -m unittest discover -s tests -p '*_test.
 엔진, Skill, schema, 테스트와 프로젝트 문서는 [Apache License 2.0](LICENSE)을 적용합니다.
 
 `skill/exord-init/assets/templates/`의 template 소스와 그로부터 생성된 실질적 결과물에는 [CC0 1.0](LICENSE.templates)을 적용합니다. 기존 또는 무관한 사용자 콘텐츠의 라이선스는 변경하지 않습니다.
+
+외부 의존성 고지는 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)에서 확인할 수 있습니다.
 
 ## 기여
 

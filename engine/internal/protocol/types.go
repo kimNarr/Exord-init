@@ -28,15 +28,71 @@ type RiskSummary struct {
 	SecretWarnings        int `json:"secret_warnings"`
 }
 
+type InventorySummary struct {
+	Files                 int   `json:"files"`
+	Directories           int   `json:"directories"`
+	Symlinks              int   `json:"symlinks"`
+	SpecialFiles          int   `json:"special_files"`
+	ExcludedDirectories   int   `json:"excluded_directories"`
+	LargeFiles            int   `json:"large_files"`
+	UnhashedFiles         int   `json:"unhashed_files"`
+	NestedGitRepositories int   `json:"nested_git_repositories"`
+	SecretCandidates      int   `json:"secret_candidates"`
+	SecretScanLimited     bool  `json:"secret_scan_limited"`
+	TotalBytes            int64 `json:"total_bytes"`
+}
+
+type GitAnalysis struct {
+	Detected       bool   `json:"detected"`
+	CLIAvailable   bool   `json:"cli_available"`
+	RootMatch      bool   `json:"root_match"`
+	GitFile        bool   `json:"git_file"`
+	Branch         string `json:"branch"`
+	Head           string `json:"head"`
+	Unborn         bool   `json:"unborn"`
+	TrackedDirty   bool   `json:"tracked_dirty"`
+	UntrackedFiles int    `json:"untracked_files"`
+	InProgress     string `json:"in_progress"`
+	Status         string `json:"status"`
+}
+
+type TaskAnalysis struct {
+	Path            string `json:"path"`
+	Status          string `json:"status"`
+	AlternativePath string `json:"alternative_path"`
+}
+
+type GuidanceAnalysis struct {
+	Path       string `json:"path"`
+	Status     string `json:"status"`
+	ActualPath string `json:"actual_path,omitempty"`
+	SHA256     string `json:"sha256,omitempty"`
+}
+
+type Conflict struct {
+	Path    string   `json:"path"`
+	Reason  string   `json:"reason"`
+	Options []string `json:"options"`
+}
+
+type AdoptAnalysis struct {
+	Inventory InventorySummary   `json:"inventory"`
+	Git       GitAnalysis        `json:"git"`
+	Task      TaskAnalysis       `json:"task"`
+	Guidance  []GuidanceAnalysis `json:"guidance"`
+	Conflicts []Conflict         `json:"conflicts"`
+}
+
 type PlanSpec struct {
-	Mode                 string       `json:"mode"`
-	Depth                string       `json:"depth"`
-	ProjectID            string       `json:"project_id"`
-	TargetIdentitySHA256 string       `json:"target_identity_sha256"`
-	TargetFingerprint    string       `json:"target_fingerprint"`
-	Operations           []Operation  `json:"operations"`
-	Validation           []Validation `json:"validation"`
-	RiskSummary          RiskSummary  `json:"risk_summary"`
+	Mode                 string         `json:"mode"`
+	Depth                string         `json:"depth"`
+	ProjectID            string         `json:"project_id"`
+	TargetIdentitySHA256 string         `json:"target_identity_sha256"`
+	TargetFingerprint    string         `json:"target_fingerprint"`
+	Operations           []Operation    `json:"operations"`
+	Validation           []Validation   `json:"validation"`
+	RiskSummary          RiskSummary    `json:"risk_summary"`
+	AdoptAnalysis        *AdoptAnalysis `json:"adopt_analysis,omitempty"`
 }
 
 type SetupPlan struct {

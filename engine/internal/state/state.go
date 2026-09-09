@@ -1,6 +1,7 @@
 package state
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -40,6 +41,20 @@ func ProjectRoot(targetPath, identity string) (string, error) {
 		return filepath.Join(gitPath, "exord-init"), nil
 	} else if !os.IsNotExist(err) {
 		return "", errors.New("cannot inspect Git state directory")
+	}
+	base, err := userStateBase()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(base, "projects", identity), nil
+}
+
+func ExternalProjectRoot(identity string) (string, error) {
+	if len(identity) != 64 {
+		return "", errors.New("invalid target identity")
+	}
+	if _, err := hex.DecodeString(identity); err != nil || strings.ToLower(identity) != identity {
+		return "", errors.New("invalid target identity")
 	}
 	base, err := userStateBase()
 	if err != nil {

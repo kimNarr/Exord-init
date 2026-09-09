@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -56,7 +57,13 @@ func PrepareWithProjectID(intent protocol.SetupIntent, inspection target.Inspect
 		return PreparedPlan{}, err
 	}
 
-	files, err := renderedFiles(intent, projectID)
+	gitMode := "DOCUMENT_ONLY"
+	for _, entry := range inspection.Entries {
+		if entry == ".git" {
+			gitMode = "ENABLED"
+		}
+	}
+	files, err := renderedFiles(intent, projectID, gitMode)
 	if err != nil {
 		return PreparedPlan{}, err
 	}
@@ -107,6 +114,117 @@ func PrepareWithProjectID(intent protocol.SetupIntent, inspection target.Inspect
 		preparedFiles = append(preparedFiles, PreparedFile{Path: file.Path, Content: []byte(normalizeLF(file.Content))})
 	}
 	return PreparedPlan{Plan: plan, Files: preparedFiles}, nil
+}
+
+func BuildAdopt(intent protocol.SetupIntent, inspection target.AdoptInspection, projectID string) (protocol.SetupPlan, error) {
+	if err := validateIntent(intent); err != nil {
+		return protocol.SetupPlan{}, err
+	}
+	if intent.Mode != "ADOPT" || intent.Depth != "QUICK" {
+		return protocol.SetupPlan{}, errors.New("current ADOPT planner supports QUICK only")
+	}
+	if !validUUID(projectID) {
+		return protocol.SetupPlan{}, errors.New("invalid project ID")
+	}
+	planID, err := id.UUID4()
+	if err != nil {
+		return protocol.SetupPlan{}, err
+	}
+	gitMode := "DOCUMENT_ONLY"
+	if inspection.Git.Detected && inspection.Git.RootMatch {
+		gitMode = "ENABLED"
+	}
+	allFiles, err := renderedFiles(intent, projectID, gitMode)
+	if err != nil {
+		return protocol.SetupPlan{}, err
+	}
+	guidance := map[string]protocol.GuidanceAnalysis{}
+	for _, item := range inspection.Guidance {
+		guidance[item.Path] = item
+	}
+	conflicts := []protocol.Conflict{}
+	candidates := []rendered{}
+	for _, file := range allFiles {
+		if file.Path == ".exord/manifest.json" {
+			continue
+		}
+		item := guidance[file.Path]
+		if item.Status == "MISSING" {
+			if parentConflict := adoptParentConflict(file.Path, inspection); parentConflict != "" {
+				conflicts = append(conflicts, protocol.Conflict{Path: file.Path, Reason: parentConflict, Options: []string{"SKIP", "ALTERNATE_PATH"}})
+				continue
+			}
+			candidates = append(candidates, file)
+			continue
+		}
+		conflicts = append(conflicts, conflictForGuidance(item))
+	}
+	manifestStatus := guidance[".exord/manifest.json"]
+	if manifestStatus.Status == "MISSING" {
+		if parentConflict := adoptParentConflict(".exord/manifest.json", inspection); parentConflict != "" {
+			conflicts = append(conflicts, protocol.Conflict{Path: ".exord/manifest.json", Reason: parentConflict, Options: []string{"SKIP", "ALTERNATE_PATH"}})
+		} else {
+			manifest, err := renderManifest(intent, projectID, candidates, gitMode)
+			if err != nil {
+				return protocol.SetupPlan{}, err
+			}
+			candidates = append(candidates, manifest)
+		}
+	} else {
+		conflicts = append(conflicts, conflictForGuidance(manifestStatus))
+	}
+	operations := operationsFor(candidates)
+	sort.Slice(conflicts, func(i, j int) bool { return conflicts[i].Path < conflicts[j].Path })
+	analysis := &protocol.AdoptAnalysis{Inventory: inspection.Inventory, Git: inspection.Git, Task: inspection.Task, Guidance: inspection.Guidance, Conflicts: conflicts}
+	spec := protocol.PlanSpec{
+		Mode: intent.Mode, Depth: intent.Depth, ProjectID: projectID,
+		TargetIdentitySHA256: inspection.IdentitySHA256, TargetFingerprint: inspection.Fingerprint,
+		Operations:    operations,
+		Validation:    []protocol.Validation{{ID: "adopt-conflicts-classified-v1", Path: ""}, {ID: "adopt-git-boundary-v1", Path: ".git"}, {ID: "adopt-inventory-v1", Path: ""}},
+		RiskSummary:   protocol.RiskSummary{SecretWarnings: inspection.Inventory.SecretCandidates},
+		AdoptAnalysis: analysis,
+	}
+	canonical, err := canonicaljson.Marshal(spec)
+	if err != nil {
+		return protocol.SetupPlan{}, err
+	}
+	sum := sha256.Sum256(canonical)
+	return protocol.SetupPlan{SchemaVersion: 1, PlanID: planID, TargetFingerprint: inspection.Fingerprint, Spec: spec, SpecSHA256: hex.EncodeToString(sum[:])}, nil
+}
+
+func operationsFor(files []rendered) []protocol.Operation {
+	operations := make([]protocol.Operation, 0, len(files))
+	for _, file := range files {
+		sum := sha256.Sum256([]byte(normalizeLF(file.Content)))
+		operations = append(operations, protocol.Operation{Kind: "CREATE", Path: file.Path, TemplateID: file.TemplateID, ExpectedSHA256: hex.EncodeToString(sum[:])})
+	}
+	sort.Slice(operations, func(i, j int) bool { return operations[i].Path < operations[j].Path })
+	return operations
+}
+
+func adoptParentConflict(path string, inspection target.AdoptInspection) string {
+	parent := filepath.Dir(filepath.FromSlash(path))
+	for parent != "." {
+		_, kind, _, exists := inspection.Entry(filepath.ToSlash(parent))
+		if exists && kind != "DIRECTORY" {
+			return "PARENT_NOT_DIRECTORY"
+		}
+		parent = filepath.Dir(parent)
+	}
+	return ""
+}
+
+func conflictForGuidance(item protocol.GuidanceAnalysis) protocol.Conflict {
+	options := []string{"DIFF", "SKIP"}
+	switch item.Status {
+	case "LINKED_PATH", "TYPE_CONFLICT":
+		options = []string{"SKIP", "ALTERNATE_PATH"}
+	case "USER_OWNED":
+		options = []string{"DIFF", "SKIP", "ALTERNATE_PATH"}
+	case "MANAGED_UNMODIFIED":
+		options = []string{"KEEP", "REVIEW_UPDATE"}
+	}
+	return protocol.Conflict{Path: item.Path, Reason: item.Status, Options: options}
 }
 
 func validUUID(value string) bool {
@@ -181,7 +299,7 @@ func validateIntent(intent protocol.SetupIntent) error {
 
 type rendered struct{ Path, TemplateID, Content string }
 
-func renderedFiles(intent protocol.SetupIntent, projectID string) ([]rendered, error) {
+func renderedFiles(intent protocol.SetupIntent, projectID, gitMode string) ([]rendered, error) {
 	agents := append([]string(nil), intent.SupportedAgents...)
 	sort.Strings(agents)
 	data := exordinit.TemplateData{ProjectSummary: intent.ProjectSummary}
@@ -210,6 +328,16 @@ func renderedFiles(intent protocol.SetupIntent, projectID string) ([]rendered, e
 		}
 		files = append(files, rendered{Path: bridge.Path, TemplateID: bridge.ID, Content: content})
 	}
+	manifest, err := renderManifest(intent, projectID, files, gitMode)
+	if err != nil {
+		return nil, err
+	}
+	return append(files, manifest), nil
+}
+
+func renderManifest(intent protocol.SetupIntent, projectID string, files []rendered, gitMode string) (rendered, error) {
+	agents := append([]string(nil), intent.SupportedAgents...)
+	sort.Strings(agents)
 	managed := make([]map[string]any, 0, len(files))
 	for _, file := range files {
 		sum := sha256.Sum256([]byte(normalizeLF(file.Content)))
@@ -225,20 +353,19 @@ func renderedFiles(intent protocol.SetupIntent, projectID string) ([]rendered, e
 	sort.Slice(managed, func(i, j int) bool { return managed[i]["path"].(string) < managed[j]["path"].(string) })
 	manifest, err := json.MarshalIndent(map[string]any{
 		"schema_version": 1,
-		"generator":      map[string]any{"name": "exord-init", "version": "0.2.0-dev"},
+		"generator":      map[string]any{"name": "exord-init", "version": "0.3.0-dev"},
 		"project_id":     projectID,
 		"settings": map[string]any{
-			"git_mode": "ENABLED", "branch_profile": "SIMPLE", "task_path": "TASK.md",
+			"git_mode": gitMode, "branch_profile": "SIMPLE", "task_path": "TASK.md",
 			"languages":        map[string]any{"documentation": intent.DocumentationLanguage, "commit_messages": intent.DocumentationLanguage, "code_comments": "en"},
 			"supported_agents": agents,
 		},
 		"managed_files": managed,
 	}, "", "  ")
 	if err != nil {
-		return nil, err
+		return rendered{}, err
 	}
-	files = append(files, rendered{Path: ".exord/manifest.json", TemplateID: "manifest-v1", Content: string(manifest) + "\n"})
-	return files, nil
+	return rendered{Path: ".exord/manifest.json", TemplateID: "manifest-v1", Content: string(manifest) + "\n"}, nil
 }
 
 func contains(values []string, wanted string) bool {

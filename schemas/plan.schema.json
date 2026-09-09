@@ -21,7 +21,8 @@
         "target_fingerprint": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
         "operations": {"type": "array", "items": {"$ref": "#/$defs/operation"}},
         "validation": {"type": "array", "items": {"$ref": "#/$defs/validation"}},
-        "risk_summary": {"$ref": "#/$defs/riskSummary"}
+        "risk_summary": {"$ref": "#/$defs/riskSummary"},
+        "adopt_analysis": {"$ref": "#/$defs/adoptAnalysis"}
       }
     },
     "spec_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
@@ -56,6 +57,85 @@
         "user_owned_files_touched": {"type": "integer", "minimum": 0},
         "outside_root_paths": {"type": "integer", "minimum": 0},
         "secret_warnings": {"type": "integer", "minimum": 0}
+      }
+    },
+    "adoptAnalysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inventory", "git", "task", "guidance", "conflicts"],
+      "properties": {
+        "inventory": {"$ref": "#/$defs/inventorySummary"},
+        "git": {"$ref": "#/$defs/gitAnalysis"},
+        "task": {"$ref": "#/$defs/taskAnalysis"},
+        "guidance": {"type": "array", "items": {"$ref": "#/$defs/guidanceAnalysis"}},
+        "conflicts": {"type": "array", "items": {"$ref": "#/$defs/conflict"}}
+      }
+    },
+    "inventorySummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["files", "directories", "symlinks", "special_files", "excluded_directories", "large_files", "unhashed_files", "nested_git_repositories", "secret_candidates", "secret_scan_limited", "total_bytes"],
+      "properties": {
+        "files": {"type": "integer", "minimum": 0},
+        "directories": {"type": "integer", "minimum": 0},
+        "symlinks": {"type": "integer", "minimum": 0},
+        "special_files": {"type": "integer", "minimum": 0},
+        "excluded_directories": {"type": "integer", "minimum": 0},
+        "large_files": {"type": "integer", "minimum": 0},
+        "unhashed_files": {"type": "integer", "minimum": 0},
+        "nested_git_repositories": {"type": "integer", "minimum": 0},
+        "secret_candidates": {"type": "integer", "minimum": 0},
+        "secret_scan_limited": {"type": "boolean"},
+        "total_bytes": {"type": "integer", "minimum": 0}
+      }
+    },
+    "gitAnalysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["detected", "cli_available", "root_match", "git_file", "branch", "head", "unborn", "tracked_dirty", "untracked_files", "in_progress", "status"],
+      "properties": {
+        "detected": {"type": "boolean"},
+        "cli_available": {"type": "boolean"},
+        "root_match": {"type": "boolean"},
+        "git_file": {"type": "boolean"},
+        "branch": {"type": "string"},
+        "head": {"type": "string"},
+        "unborn": {"type": "boolean"},
+        "tracked_dirty": {"type": "boolean"},
+        "untracked_files": {"type": "integer", "minimum": 0},
+        "in_progress": {"type": "string"},
+        "status": {"enum": ["NOT_GIT", "OK", "CLI_UNAVAILABLE", "INVALID_REPOSITORY", "NESTED_DIRECTORY", "STATUS_UNAVAILABLE"]}
+      }
+    },
+    "taskAnalysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "status", "alternative_path"],
+      "properties": {
+        "path": {"type": "string"},
+        "status": {"enum": ["MISSING", "EXORD_TASK", "USER_OWNED", "LINKED_PATH", "UNREADABLE"]},
+        "alternative_path": {"type": "string"}
+      }
+    },
+    "guidanceAnalysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "status"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "status": {"enum": ["MISSING", "LINKED_PATH", "TYPE_CONFLICT", "USER_OWNED", "MANAGED_UNMODIFIED", "MANAGED_MODIFIED"]},
+        "actual_path": {"type": "string"},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "conflict": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "reason", "options"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "reason": {"type": "string", "minLength": 1},
+        "options": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["DIFF", "SKIP", "ALTERNATE_PATH", "KEEP", "REVIEW_UPDATE"]}}
       }
     }
   }

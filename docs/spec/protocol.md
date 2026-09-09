@@ -4,7 +4,7 @@ This document is the public implementation-facing protocol contract. Historical 
 
 ## Boundary
 
-Adapters create a schema-valid SetupIntent. They cannot supply operations, risk counts, or a trusted hash. The engine inspects the target and exclusively creates the Setup Plan, canonical `spec_sha256`, and Result.
+Adapters create a schema-valid SetupIntent. They cannot supply operations, risk counts, or a trusted hash. The engine inspects the target and exclusively creates the Setup Plan, canonical `spec_sha256`, and Result. An ADOPT plan may include `adopt_analysis` with bounded inventory, Git, Task, known-guidance, and conflict facts; these remain inside the hashed plan spec.
 
 ## Determinism
 
@@ -16,6 +16,6 @@ Adapters create a schema-valid SetupIntent. They cannot supply operations, risk 
 
 ## Output
 
-Stdout contains exactly one Result JSON object. Redacted diagnostics use stderr. Exit codes are stable at the category level; Result `code` carries the specific reason. `plan` reports `changed: false`; a successful v0.2 `apply` reports `changed: true`.
+Stdout contains exactly one Result JSON object. Redacted diagnostics use stderr. Exit codes are stable at the category level; Result `code` carries the specific reason. Every `plan` reports `changed: false`; a successful CREATE apply reports `changed: true`. v0.3 ADOPT does not produce an applicable run or approval request.
 
 The normative machine-readable files are `schemas/intent.schema.json`, `schemas/plan.schema.json`, `schemas/approval.schema.json`, `schemas/result.schema.json`, `schemas/run.schema.json`, and `schemas/manifest.schema.json`.
