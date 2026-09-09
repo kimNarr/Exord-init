@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"example.com/exord-init/engine/internal/id"
-	"example.com/exord-init/engine/internal/planner"
-	"example.com/exord-init/engine/internal/protocol"
+	"github.com/kimNarr/Exord-init/engine/internal/id"
+	"github.com/kimNarr/Exord-init/engine/internal/planner"
+	"github.com/kimNarr/Exord-init/engine/internal/protocol"
 )
 
 var (

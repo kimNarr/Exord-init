@@ -12,11 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"example.com/exord-init/engine/internal/canonicaljson"
-	"example.com/exord-init/engine/internal/id"
-	"example.com/exord-init/engine/internal/protocol"
-	"example.com/exord-init/engine/internal/state"
-	"example.com/exord-init/engine/internal/target"
+	"github.com/kimNarr/Exord-init/engine/internal/canonicaljson"
+	"github.com/kimNarr/Exord-init/engine/internal/id"
+	"github.com/kimNarr/Exord-init/engine/internal/protocol"
+	"github.com/kimNarr/Exord-init/engine/internal/state"
+	"github.com/kimNarr/Exord-init/engine/internal/target"
 )
 
 const maxStagedFileBytes = 4 << 20

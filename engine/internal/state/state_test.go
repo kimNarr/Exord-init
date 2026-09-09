@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"example.com/exord-init/engine/internal/planner"
-	"example.com/exord-init/engine/internal/protocol"
+	"github.com/kimNarr/Exord-init/engine/internal/planner"
+	"github.com/kimNarr/Exord-init/engine/internal/protocol"
 )
 
 const testRunID = "123e4567-e89b-42d3-a456-426614174000"

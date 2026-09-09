@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"example.com/exord-init/engine/internal/planner"
-	"example.com/exord-init/engine/internal/protocol"
-	"example.com/exord-init/engine/internal/state"
-	"example.com/exord-init/engine/internal/target"
+	"github.com/kimNarr/Exord-init/engine/internal/planner"
+	"github.com/kimNarr/Exord-init/engine/internal/protocol"
+	"github.com/kimNarr/Exord-init/engine/internal/state"
+	"github.com/kimNarr/Exord-init/engine/internal/target"
 )
 
 func TestExecuteAppliesBoundCreatePlanAndCleansRun(t *testing.T) {

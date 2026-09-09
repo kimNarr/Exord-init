@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"example.com/exord-init/engine/internal/protocol"
-	"example.com/exord-init/engine/internal/target"
+	"github.com/kimNarr/Exord-init/engine/internal/protocol"
+	"github.com/kimNarr/Exord-init/engine/internal/target"
 )
 
 func TestBuildCreatesDeterministicallyOrderedSafePlan(t *testing.T) {

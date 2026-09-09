@@ -1,3 +1,3 @@
-module example.com/exord-init
+module github.com/kimNarr/Exord-init
 
 go 1.25

@@ -8,13 +8,13 @@ import (
 	"os"
 	"runtime"
 
-	exordinit "example.com/exord-init"
-	applyengine "example.com/exord-init/engine/internal/apply"
-	"example.com/exord-init/engine/internal/id"
-	"example.com/exord-init/engine/internal/planner"
-	"example.com/exord-init/engine/internal/protocol"
-	"example.com/exord-init/engine/internal/state"
-	"example.com/exord-init/engine/internal/target"
+	exordinit "github.com/kimNarr/Exord-init"
+	applyengine "github.com/kimNarr/Exord-init/engine/internal/apply"
+	"github.com/kimNarr/Exord-init/engine/internal/id"
+	"github.com/kimNarr/Exord-init/engine/internal/planner"
+	"github.com/kimNarr/Exord-init/engine/internal/protocol"
+	"github.com/kimNarr/Exord-init/engine/internal/state"
+	"github.com/kimNarr/Exord-init/engine/internal/target"
 )
 
 var version = "0.2.0-dev"

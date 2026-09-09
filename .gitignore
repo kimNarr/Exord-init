@@ -5,6 +5,7 @@ coverage.out
 *.test
 /exord-init
 /exord-init.exe
+/bin/
 __pycache__/
 *.py[cod]
 
