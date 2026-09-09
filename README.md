@@ -1,16 +1,14 @@
 # exord-init
 
+[English](README.md) | [한국어](README.ko.md)
+
 `exord-init` is an early-stage, model-portable Agent Skill and deterministic engine for preparing a software-project foundation before feature implementation begins.
 
 It is designed for both individual vibe-coding projects and teams using OpenAI Codex, Anthropic Claude Code, or Google Gemini CLI. Instead of choosing a framework first, it guides the project through product definition, scope, architecture boundaries, working agreements, source-control policy, validation, and task preparation—then derives the technical setup from those decisions.
 
+The project itself is being developed through a vibe-coding workflow: a human directs product and safety decisions while AI coding agents help research, design, implement, review, and test the system. “Vibe-coded” does not mean unverified—the repository uses explicit contracts, plan-bound approval, automated tests, and human review to keep generated changes accountable.
+
 > Development status: **v0.2 prototype**. There is no stable release or supported installer yet. The current engine implements only the safe `CREATE + QUICK` vertical slice described below.
-
-## 한국어 요약
-
-`exord-init`은 개인 또는 팀이 바이브코딩으로 프로젝트를 시작할 때 제품 목적, 범위, 아키텍처, 협업 규칙, 소스 관리와 검증 방식을 먼저 정리하도록 돕는 Agent Skill입니다. Codex, Claude Code, Gemini CLI가 가능한 한 같은 계약과 결과를 사용하도록 공통 `SKILL.md`와 Go 엔진을 함께 제공합니다.
-
-현재 v0.2는 비어 있거나 안전 허용 항목만 있는 폴더에 대해 `CREATE + QUICK` 계획과 명시적 사용자 승인 후 초기 문서 생성을 지원합니다. 기존 프로젝트 적용, 파일 삭제, Git commit·push, branch 변경과 제품 기능 구현은 아직 수행하지 않습니다.
 
 ## Why exord-init?
 

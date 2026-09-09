@@ -31,6 +31,23 @@ class ContractTests(unittest.TestCase):
         runtime_files = list((ROOT / "skill" / "exord-init").rglob("*"))
         self.assertFalse(any("feedback" in path.parts for path in runtime_files))
 
+    def test_english_and_korean_readmes_share_critical_contract_terms(self):
+        readmes = [
+            (ROOT / "README.md").read_text(encoding="utf-8"),
+            (ROOT / "README.ko.md").read_text(encoding="utf-8"),
+        ]
+        for content in readmes:
+            for required in [
+                "CREATE + QUICK",
+                "doctor --json",
+                "APPLY_CREATE",
+                "spec_sha256",
+                "go test ./...",
+                "Apache License 2.0",
+            ]:
+                self.assertIn(required, content)
+            self.assertIn("vibe-coding", content)
+
 
 if __name__ == "__main__":
     unittest.main()
