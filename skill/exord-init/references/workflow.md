@@ -3,10 +3,12 @@
 ## Purpose selection
 
 - `CREATE`: only for an empty target or the documented harmless-entry allowlist.
-- `ADOPT`: preserve an existing project and propose non-destructive additions. In v0.3, stop after read-only inventory, Git/Task analysis, and conflict classification.
+- `ADOPT`: preserve an existing project and propose non-destructive additions. In the current prototype, stop after read-only inventory, Git/Task analysis, and conflict classification; ADOPT apply is not implemented.
 - `REINITIALIZE`: advanced flow; external verified backup is mandatory.
 
 Never change the selected purpose because inspection found unexpected files. Stop and ask the user to choose.
+
+`recover list` and `plan` both scan for retained runs. If `plan` returns `BLOCKED`, or `recover list` shows a run with `blocks_new_plan`, inspect and resolve that run before proposing a new mutating plan. Do not reinterpret the original CREATE approval as recovery approval.
 
 ## Depth selection
 

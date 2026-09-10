@@ -8,7 +8,7 @@ It is designed for both individual vibe-coding projects and teams using OpenAI C
 
 The project itself is being developed through a vibe-coding workflow: a human directs product and safety decisions while AI coding agents help research, design, implement, review, and test the system. “Vibe-coded” does not mean unverified—the repository uses explicit contracts, plan-bound approval, automated tests, and human review to keep generated changes accountable.
 
-> Development status: **v0.3 prototype**. There is no stable release or supported installer yet. The engine supports safe `CREATE + QUICK` apply and read-only `ADOPT + QUICK` analysis.
+> Development status: **v0.4 development prototype**. There is no stable release or supported installer yet. The engine supports safe `CREATE + QUICK` apply, read-only `ADOPT + QUICK` analysis, and the first recovery slice.
 
 ## Why exord-init?
 
@@ -26,7 +26,7 @@ AI-assisted projects often accumulate framework choices, duplicated instructions
 
 ## Current capability
 
-| Area | v0.3 status |
+| Area | Current status |
 |---|---|
 | `doctor` and protocol handshake | Implemented |
 | `CREATE + QUICK` planning | Implemented |
@@ -36,6 +36,11 @@ AI-assisted projects often accumulate framework choices, duplicated instructions
 | English and Korean generated documents | Implemented |
 | Codex, Claude Code, and Gemini CLI document targets | Implemented |
 | Read-only `ADOPT + QUICK` inventory and conflict plan | Implemented |
+| Recovery inspection and approval-bound rollback | Implemented |
+| `recover list` retained-run discovery and pre-plan blocking on recovery-required runs | Implemented |
+| Declared apply validations (`agents-size`, `manifest-schema`, `project-required-sections`) executed before finalization | Implemented |
+| Test-only fault injection (currently 2 stages: after publication, before validation) | Implemented |
+| Upgrade planning and additional fault stages | Planned for the remaining v0.4 work |
 | `CUSTOM`, `REINITIALIZE`, and ADOPT apply | Not implemented |
 | Task and Git analysis | Implemented for ADOPT; generation remains planned |
 | Commit, branch, remote, and push automation | Not implemented |
@@ -90,7 +95,7 @@ go build -trimpath -o .\bin\exord-init.exe .\engine\cmd\exord-init
 .\bin\exord-init.exe doctor --json
 ```
 
-`doctor` should report protocol version `1` and the `plan:create-quick`, `apply:create-quick`, and `plan:adopt-quick` capabilities.
+`doctor` should report protocol version `1` and the `plan:create-quick`, `apply:create-quick`, `plan:adopt-quick`, `recover:inspect`, `recover:rollback`, and `recover:list` capabilities.
 
 ## Quick start: `CREATE + QUICK`
 
@@ -101,6 +106,8 @@ The directory must already exist and may contain only documented harmless entrie
 ```sh
 mkdir ../my-project
 ```
+
+To use the project as a Git repository, run `git init` in the target **before** `plan`. The plan records the target fingerprint, so creating `.git` after planning changes it and apply fails closed with `PLAN_STALE`. Without `.git`, the manifest is generated with `git_mode: DOCUMENT_ONLY`.
 
 ### 2. Create a SetupIntent
 
@@ -168,11 +175,11 @@ There is intentionally no broad `--yes` flag. Approval is valid only for the exa
   --json
 ```
 
-On success, the engine validates every generated file and removes the finalized run bundle. On failure, it rolls back only files created by that run whose hashes are still unchanged. Incomplete recovery state is retained for inspection.
+On success, the engine re-hashes every generated file, runs the plan's declared validations (`agents-size-v1`, `manifest-schema-v1`, `project-required-sections-v1`), and only then removes the finalized run bundle. On failure, including a failed validation, it rolls back only files created by that run whose hashes are still unchanged. Incomplete recovery state is retained for inspection.
 
 ## Read-only existing-project analysis: `ADOPT + QUICK`
 
-Set `mode` to `ADOPT` in the SetupIntent and run the same `plan` command against an existing project. v0.3 will not modify or stage files for apply. It reports:
+Set `mode` to `ADOPT` in the SetupIntent and run the same `plan` command against an existing project. The current prototype will not modify or stage files for apply. It reports:
 
 - bounded inventory counts without exposing the full project file list;
 - content fingerprints using NFC-normalized paths, with explicit hashing and scan limits;
@@ -183,6 +190,36 @@ Set `mode` to `ADOPT` in the SetupIntent and run the same `plan` command against
 - secret-candidate counts without printing detected values.
 
 The scanner does not follow `.git`, dependency caches, symlinks, or nested repositories. Git inspection disables optional locks and external fsmonitor and performs no network operation. If a secret candidate is found or scanning reaches a safety limit, commit proposals must stop pending human review.
+
+## Interrupted-run recovery
+
+List every retained run bundle for a target:
+
+```sh
+./bin/exord-init recover list --target ../my-project --json
+```
+
+Each entry reports `run_id`, `status`, `stage`, `started_at`, and a single safe `next_action`. `plan` runs the same scan before persisting a new CREATE run and returns `BLOCKED` (persisting nothing) if any retained run is recovery-required, interrupted mid-apply, or unreadable. Never-applied plans, rolled-back runs, and finalized bundles are reported as warnings only.
+
+Inspect a retained run before changing anything:
+
+```sh
+./bin/exord-init recover inspect --target ../my-project --run-id <run_id> --json
+```
+
+The engine verifies the stored plan hash, journal binding, target identity, operation state, and current file hashes. `ROLLBACK_READY` means only files whose bytes still match the approved generated hashes are eligible for removal. A modified, unreadable, linked, or type-conflicting path blocks the entire automatic rollback before it starts.
+
+Rollback requires a separate approval document bound to the same run, plan, spec hash, target identity, and the exact `RECOVER_ROLLBACK` action:
+
+```sh
+./bin/exord-init recover rollback \
+  --target ../my-project \
+  --run-id <run_id> \
+  --approval ./recovery-approval.json \
+  --json
+```
+
+Recovery rechecks each file immediately before removal and journals every step. It deliberately leaves empty directories and retains the failed run bundle for later explicit disposition. `recover list` reports retained bundles; an approval-gated `recover discard` and finalized-state cleanup are not implemented in this slice.
 
 ## Generated project files
 
@@ -196,9 +233,9 @@ CLAUDE.md              Thin Claude Code bridge, when requested
 GEMINI.md              Thin Gemini CLI bridge, when requested
 ```
 
-`CLAUDE.md` and `GEMINI.md` point back to the canonical `AGENTS.md`; they do not duplicate all project rules. Architecture-layer documents and `TASK.md` are conditional future outputs and are not generated by the current v0.3 QUICK flow.
+`CLAUDE.md` and `GEMINI.md` point back to the canonical `AGENTS.md`; they do not duplicate all project rules. Architecture-layer documents and `TASK.md` are conditional future outputs and are not generated by the current v0.4 QUICK flow.
 
-## Safety guarantees in v0.3
+## Safety guarantees in the current prototype
 
 - QUICK reduces questions, never safety checks.
 - Existing user files are never overwritten.
@@ -208,9 +245,12 @@ GEMINI.md              Thin Gemini CLI bridge, when requested
 - Files are published atomically without replace semantics; the manifest is written last.
 - Rollback removes only unchanged files created by the current run.
 - Failed and recovery-required run state is preserved.
+- The project run lock is an OS advisory lock; a crashed run cannot leave the project permanently locked, and a leftover `lock.json` after a finalized run is a warning, not a recovery-required state.
 - The engine never commits, pushes, changes branches, deletes Git history, or sends telemetry.
 - `REINITIALIZE` and permanent deletion remain disabled.
-- ADOPT is analysis-only and cannot be applied in v0.3.
+- ADOPT is analysis-only and cannot be applied in the current prototype.
+- Recovery rollback removes only journaled CREATE outputs whose current SHA-256 still matches the stored plan; conflicts block mutation.
+- Recovery approval is independent from the original CREATE approval and is bound to `RECOVER_ROLLBACK`.
 
 See [the safety contract](docs/spec/safety.md) and [protocol contract](docs/spec/protocol.md) for the public implementation boundaries.
 
@@ -258,22 +298,23 @@ python -m pip install -r requirements-dev.txt
 python -m unittest discover -s tests -p '*_test.py'
 ```
 
-Set `EXORD_INIT_BIN` to a built executable to include the binary `plan -> approval -> apply` schema integration test:
+Set `EXORD_INIT_BIN` to a built executable to include binary CREATE apply, read-only ADOPT, and approved recovery integration tests:
 
 ```sh
 EXORD_INIT_BIN=./bin/exord-init python -m unittest discover -s tests -p '*_test.py'
 ```
 
-Native execution has currently been verified on Windows amd64. Linux amd64, macOS arm64, and Windows arm64 cross-compilation succeeds, but native platform-matrix and release-artifact verification remain future work.
+Local native execution has been exercised on Windows amd64. Cross-compilation succeeds for windows/amd64, windows/arm64, linux/amd64, and darwin/arm64. A GitHub Actions matrix (`.github/workflows/ci.yml`) runs `go build`, `go vet`, `go test`, a trimpath CLI build, and the Python contract/schema/integration suite on linux amd64, linux arm64, windows amd64, and macOS arm64. Release-artifact signing and packaging remain future work.
 
 ## Roadmap
 
 The planned risk-ordered implementation sequence is:
 
-1. v0.2: safe `CREATE + QUICK` plan-bound apply — implemented.
-2. v0.3: read-only `ADOPT` inventory, conflict analysis, Task and Git analysis — implemented.
-3. v0.4: recovery commands, upgrade behavior, and fault injection.
-4. Later: `REINITIALIZE` with verified external backup and separately approved destructive options.
+1. v0.1: read-only `doctor` and `CREATE + QUICK` planning — implemented.
+2. v0.2: safe `CREATE + QUICK` plan-bound apply — implemented.
+3. v0.3: read-only `ADOPT` inventory, conflict analysis, Task and Git analysis — implemented.
+4. v0.4: recovery commands, upgrade behavior, and fault injection — recovery inspection, approved rollback, `recover list` discovery with pre-plan blocking, declared apply-validation execution, and two apply fault points are implemented; `recover discard`, upgrade, and the remaining fault matrix are pending.
+5. Later: `REINITIALIZE` with verified external backup and separately approved destructive options.
 
 This roadmap describes implementation order, not a release commitment.
 

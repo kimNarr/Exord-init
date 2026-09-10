@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  engine:
+    name: engine ${{ matrix.label }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # GitHub-hosted standard runners. ubuntu-latest / windows-latest are
+          # x64; macos-latest is arm64 (macOS 26). ubuntu-24.04-arm is the
+          # free arm64 Linux runner that has been GA for public repositories
+          # since 2025-08. windows-11-arm is intentionally left out for now
+          # because native Go arm64 Windows caching is still flaky.
+          - label: linux-amd64
+            runner: ubuntu-latest
+          - label: linux-arm64
+            runner: ubuntu-24.04-arm
+          - label: windows-amd64
+            runner: windows-latest
+          - label: macos-arm64
+            runner: macos-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          # Minimum supported toolchain. Safe apply relies on os.Root and
+          # create-only hard-link publication, both of which require Go 1.25.
+          go-version: '1.25.x'
+          check-latest: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: go build
+        run: go build ./...
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test ./...
+
+      - name: Build CLI (trimpath)
+        run: |
+          bin="${RUNNER_TEMP}/exord-init"
+          if [ "${RUNNER_OS}" = "Windows" ]; then
+            bin="${bin}.exe"
+          fi
+          go build -trimpath -o "${bin}" ./engine/cmd/exord-init
+          "${bin}" doctor --json
+          echo "EXORD_INIT_BIN=${bin}" >> "${GITHUB_ENV}"
+
+      - name: Install Python test dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Contract, schema, and binary integration tests
+        # EXORD_INIT_BIN enables the CREATE apply, read-only ADOPT, and approved
+        # recovery integration tests. Every fixture is synthetic; no real secret
+        # value is used anywhere in the suite.
+        run: python -m unittest discover -s tests -p '*_test.py' -v

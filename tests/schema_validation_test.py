@@ -188,6 +188,161 @@ class SchemaValidationTests(unittest.TestCase):
             if state_home.exists():
                 shutil.rmtree(state_home)
 
+    @unittest.skipUnless(os.environ.get("EXORD_INIT_BIN"), "set EXORD_INIT_BIN")
+    def test_binary_recovery_inspect_and_approved_rollback(self):
+        binary = os.environ["EXORD_INIT_BIN"]
+        intent = ROOT / "tests" / "fixtures" / "intent-create-quick-ko.json"
+        local_temp = ROOT / ".tools" / "test-fixtures"
+        local_temp.mkdir(parents=True, exist_ok=True)
+        suffix = uuid.uuid4().hex
+        target = local_temp / f"recovery-{suffix}"
+        approval_path = local_temp / f"recovery-approval-{suffix}.json"
+        target.mkdir()
+        (target / ".git").mkdir()
+        try:
+            planned = subprocess.run(
+                [binary, "plan", "--intent", str(intent), "--target", str(target), "--json"],
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+            plan_result = json.loads(planned.stdout)
+            run_id = plan_result["run_id"]
+            run_dir = target / ".git" / "exord-init" / "runs" / run_id
+            plan = plan_result["data"]["plan"]
+            operation = next(
+                item for item in plan["spec"]["operations"] if item["path"] == "AGENTS.md"
+            )
+            shutil.copyfile(run_dir / "staging" / "AGENTS.md", target / "AGENTS.md")
+            journal_path = run_dir / "run.json"
+            journal = json.loads(journal_path.read_text(encoding="utf-8"))
+            journal["status"] = "RECOVERY_REQUIRED"
+            journal["stage"] = "FILES_APPLYING"
+            for item in journal["operations"]:
+                if item["path"] == operation["path"]:
+                    item["status"] = "APPLYING"
+            journal_path.write_text(json.dumps(journal), encoding="utf-8")
+
+            inspected = subprocess.run(
+                [binary, "recover", "inspect", "--target", str(target), "--run-id", run_id, "--json"],
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+            inspect_result = json.loads(inspected.stdout)
+            self.validate(inspect_result, "result.schema.json")
+            self.validate(inspect_result["data"]["recovery"], "recovery.schema.json")
+            self.assertFalse(inspect_result["changed"])
+            self.assertEqual(
+                inspect_result["data"]["recovery"]["disposition"], "ROLLBACK_READY"
+            )
+
+            approval = dict(plan_result["data"]["approval_request"])
+            approval["approved_action"] = "RECOVER_ROLLBACK"
+            approval["approved_at"] = datetime.now(timezone.utc).isoformat().replace(
+                "+00:00", "Z"
+            )
+            self.validate(approval, "approval.schema.json")
+            approval_path.write_text(json.dumps(approval), encoding="utf-8")
+            rolled_back = subprocess.run(
+                [
+                    binary,
+                    "recover",
+                    "rollback",
+                    "--target",
+                    str(target),
+                    "--run-id",
+                    run_id,
+                    "--approval",
+                    str(approval_path),
+                    "--json",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+            rollback_result = json.loads(rolled_back.stdout)
+            self.validate(rollback_result, "result.schema.json")
+            self.validate(rollback_result["data"]["recovery"], "recovery.schema.json")
+            self.assertTrue(rollback_result["changed"])
+            self.assertFalse((target / "AGENTS.md").exists())
+            retained = json.loads(journal_path.read_text(encoding="utf-8"))
+            self.assertEqual(retained["status"], "FAILED")
+            self.assertEqual(retained["stage"], "ROLLED_BACK")
+        finally:
+            if approval_path.exists():
+                approval_path.unlink()
+            shutil.rmtree(target)
+
+    @unittest.skipUnless(os.environ.get("EXORD_INIT_BIN"), "set EXORD_INIT_BIN")
+    def test_binary_recover_list_and_pre_plan_blocking(self):
+        binary = os.environ["EXORD_INIT_BIN"]
+        intent = ROOT / "tests" / "fixtures" / "intent-create-quick-ko.json"
+        local_temp = ROOT / ".tools" / "test-fixtures"
+        local_temp.mkdir(parents=True, exist_ok=True)
+        target = local_temp / f"list-{uuid.uuid4().hex}"
+        target.mkdir()
+        (target / ".git").mkdir()
+
+        def run(*args, check=True):
+            return subprocess.run(
+                [binary, *args, "--json"],
+                check=check,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+
+        try:
+            plan_result = json.loads(
+                run("plan", "--intent", str(intent), "--target", str(target)).stdout
+            )
+            run_id = plan_result["run_id"]
+
+            listed = json.loads(run("recover", "list", "--target", str(target)).stdout)
+            self.validate(listed, "result.schema.json")
+            self.validate(
+                {
+                    "retained_runs": listed["data"]["retained_runs"],
+                    "blocking_runs": listed["data"]["blocking_runs"],
+                },
+                "retained-runs.schema.json",
+            )
+            self.assertEqual(len(listed["data"]["retained_runs"]), 1)
+            self.assertEqual(listed["data"]["retained_runs"][0]["run_id"], run_id)
+            self.assertFalse(listed["data"]["retained_runs"][0]["blocks_new_plan"])
+            self.assertEqual(listed["data"]["blocking_runs"], 0)
+
+            # A never-applied plan does not block a second plan.
+            second = run("plan", "--intent", str(intent), "--target", str(target))
+            self.assertEqual(json.loads(second.stdout)["status"], "OK")
+
+            # Force one run into RECOVERY_REQUIRED and confirm blocking.
+            journal_path = (
+                target / ".git" / "exord-init" / "runs" / run_id / "run.json"
+            )
+            journal = json.loads(journal_path.read_text(encoding="utf-8"))
+            journal["status"] = "RECOVERY_REQUIRED"
+            journal["stage"] = "FILES_APPLYING"
+            journal_path.write_text(json.dumps(journal), encoding="utf-8")
+
+            listed = json.loads(run("recover", "list", "--target", str(target)).stdout)
+            self.assertGreaterEqual(listed["data"]["blocking_runs"], 1)
+
+            blocked = run(
+                "plan", "--intent", str(intent), "--target", str(target), check=False
+            )
+            self.assertEqual(blocked.returncode, 6)
+            blocked_result = json.loads(blocked.stdout)
+            self.validate(blocked_result, "result.schema.json")
+            self.assertEqual(blocked_result["status"], "BLOCKED")
+            self.assertEqual(blocked_result["code"], "RECOVERY_REQUIRED")
+        finally:
+            shutil.rmtree(target)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -353,7 +353,7 @@ func renderManifest(intent protocol.SetupIntent, projectID string, files []rende
 	sort.Slice(managed, func(i, j int) bool { return managed[i]["path"].(string) < managed[j]["path"].(string) })
 	manifest, err := json.MarshalIndent(map[string]any{
 		"schema_version": 1,
-		"generator":      map[string]any{"name": "exord-init", "version": "0.3.0-dev"},
+		"generator":      map[string]any{"name": "exord-init", "version": "0.4.0-dev"},
 		"project_id":     projectID,
 		"settings": map[string]any{
 			"git_mode": gitMode, "branch_profile": "SIMPLE", "task_path": "TASK.md",

@@ -3,6 +3,7 @@ package apply
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -74,6 +75,56 @@ func TestExecuteClassifiesCorruptStoredPlanSeparately(t *testing.T) {
 	_, failure := Execute(targetPath, projectRoot, runID, approvalFor(runID, prepared.Plan))
 	if failure == nil || failure.Code != "PLAN_INVALID" {
 		t.Fatalf("expected PLAN_INVALID, got %#v", failure)
+	}
+}
+
+func TestFaultAfterPublishLeavesRecoverableJournal(t *testing.T) {
+	targetPath, projectRoot, runID, prepared := prepareRun(t)
+	injected := errors.New("test-only interruption")
+	_, failure := execute(targetPath, projectRoot, runID, approvalFor(runID, prepared.Plan), func(stage string) error {
+		if stage == "after-publish:AGENTS.md" {
+			return injected
+		}
+		return nil
+	})
+	if failure == nil || failure.Code != "RECOVERY_REQUIRED" || !errors.Is(failure.Err, injected) {
+		t.Fatalf("expected injected recovery failure, got %#v", failure)
+	}
+	if _, err := os.Stat(filepath.Join(targetPath, "AGENTS.md")); err != nil {
+		t.Fatalf("published file should remain for recovery inspection: %v", err)
+	}
+	_, _, journal, err := state.Load(projectRoot, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if journal.Status != "RECOVERY_REQUIRED" || journal.Stage != "FILES_APPLYING" {
+		t.Fatalf("unexpected recovery journal: %#v", journal)
+	}
+}
+
+func TestFaultBeforeValidationLeavesAllOperationsApplied(t *testing.T) {
+	targetPath, projectRoot, runID, prepared := prepareRun(t)
+	injected := errors.New("test-only interruption")
+	_, failure := execute(targetPath, projectRoot, runID, approvalFor(runID, prepared.Plan), func(stage string) error {
+		if stage == "before-validation" {
+			return injected
+		}
+		return nil
+	})
+	if failure == nil || failure.Code != "RECOVERY_REQUIRED" || !errors.Is(failure.Err, injected) {
+		t.Fatalf("expected injected recovery failure, got %#v", failure)
+	}
+	_, _, journal, err := state.Load(projectRoot, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if journal.Status != "RECOVERY_REQUIRED" || journal.Stage != "FILES_APPLIED" {
+		t.Fatalf("unexpected pre-validation journal: %#v", journal)
+	}
+	for _, operation := range journal.Operations {
+		if operation.Status != "APPLIED" {
+			t.Fatalf("operation %s was not journaled as applied: %s", operation.Path, operation.Status)
+		}
 	}
 }
 

@@ -36,13 +36,7 @@ func write(out *bytes.Buffer, value any) error {
 	case bool:
 		out.WriteString(strconv.FormatBool(v))
 	case string:
-		encoded, _ := json.Marshal(v)
-		encoded = bytes.ReplaceAll(encoded, []byte(`\u003c`), []byte("<"))
-		encoded = bytes.ReplaceAll(encoded, []byte(`\u003e`), []byte(">"))
-		encoded = bytes.ReplaceAll(encoded, []byte(`\u0026`), []byte("&"))
-		encoded = bytes.ReplaceAll(encoded, []byte(`\u2028`), []byte("\xe2\x80\xa8"))
-		encoded = bytes.ReplaceAll(encoded, []byte(`\u2029`), []byte("\xe2\x80\xa9"))
-		out.Write(encoded)
+		writeString(out, v)
 	case json.Number:
 		if _, err := strconv.ParseInt(v.String(), 10, 64); err != nil {
 			return errors.New("canonical JSON protocol only accepts signed 64-bit integers")
@@ -70,9 +64,7 @@ func write(out *bytes.Buffer, value any) error {
 			if i > 0 {
 				out.WriteByte(',')
 			}
-			if err := write(out, key); err != nil {
-				return err
-			}
+			writeString(out, key)
 			out.WriteByte(':')
 			if err := write(out, v[key]); err != nil {
 				return err
@@ -83,6 +75,45 @@ func write(out *bytes.Buffer, value any) error {
 		return errors.New("unsupported canonical JSON value")
 	}
 	return nil
+}
+
+const lowerHex = "0123456789abcdef"
+
+// writeString emits the RFC 8785 (ECMA-262 JSON.stringify) serialization of a
+// JSON string: only the quote, the reverse solidus, and the C0 control block
+// U+0000..U+001F are escaped, with the two-character forms for \b \t \n \f \r
+// and lowercase \u00xx for the rest. Characters that HTML-aware encoders escape
+// (<, >, &, U+2028, U+2029) and every other non-ASCII rune are emitted verbatim
+// as UTF-8. Invalid UTF-8 is replaced with U+FFFD, matching encoding/json.
+func writeString(out *bytes.Buffer, s string) {
+	out.WriteByte('"')
+	for _, r := range s {
+		switch r {
+		case '"':
+			out.WriteString(`\"`)
+		case '\\':
+			out.WriteString(`\\`)
+		case '\b':
+			out.WriteString(`\b`)
+		case '\f':
+			out.WriteString(`\f`)
+		case '\n':
+			out.WriteString(`\n`)
+		case '\r':
+			out.WriteString(`\r`)
+		case '\t':
+			out.WriteString(`\t`)
+		default:
+			if r < 0x20 {
+				out.WriteString(`\u00`)
+				out.WriteByte(lowerHex[byte(r)>>4])
+				out.WriteByte(lowerHex[byte(r)&0xf])
+				continue
+			}
+			out.WriteRune(r)
+		}
+	}
+	out.WriteByte('"')
 }
 
 func utf16Less(a, b string) bool {

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://exord-init.dev/schema/retained-runs-v1.json",
+  "title": "exord-init Retained Runs v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["retained_runs", "blocking_runs"],
+  "properties": {
+    "blocking_runs": {"type": "integer", "minimum": 0},
+    "retained_runs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["run_id", "status", "stage", "started_at", "next_action", "blocks_new_plan"],
+        "properties": {
+          "run_id": {"type": "string", "format": "uuid"},
+          "status": {"type": "string", "minLength": 1},
+          "stage": {"type": "string", "minLength": 1},
+          "started_at": {"type": "string"},
+          "next_action": {"type": "string", "minLength": 1},
+          "blocks_new_plan": {"type": "boolean"}
+        }
+      }
+    }
+  }
+}

@@ -3,15 +3,14 @@ package apply
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 
+	approvalcontract "github.com/kimNarr/Exord-init/engine/internal/approval"
 	"github.com/kimNarr/Exord-init/engine/internal/canonicaljson"
 	"github.com/kimNarr/Exord-init/engine/internal/id"
 	"github.com/kimNarr/Exord-init/engine/internal/protocol"
@@ -35,27 +34,21 @@ type Outcome struct {
 	CleanupPending bool
 }
 
+type faultInjector func(stage string) error
+
 func DecodeApproval(data []byte) (protocol.Approval, error) {
-	var approval protocol.Approval
-	decoder := json.NewDecoder(strings.NewReader(string(data)))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&approval); err != nil {
-		return approval, err
+	value, err := approvalcontract.Decode(data)
+	if err == nil && value.ApprovedAction != "APPLY_CREATE" {
+		return value, errors.New("unsupported approval for apply")
 	}
-	var trailing any
-	if err := decoder.Decode(&trailing); err != io.EOF {
-		return approval, errors.New("approval contains trailing JSON values")
-	}
-	if approval.SchemaVersion != 1 || approval.ApprovedAction != "APPLY_CREATE" {
-		return approval, errors.New("unsupported approval")
-	}
-	if _, err := time.Parse(time.RFC3339, approval.ApprovedAt); err != nil {
-		return approval, errors.New("invalid approval timestamp")
-	}
-	return approval, nil
+	return value, err
 }
 
 func Execute(targetPath, projectRoot, runID string, approval protocol.Approval) (Outcome, *Failure) {
+	return execute(targetPath, projectRoot, runID, approval, nil)
+}
+
+func execute(targetPath, projectRoot, runID string, approval protocol.Approval, inject faultInjector) (Outcome, *Failure) {
 	runDir, plan, journal, err := state.Load(projectRoot, runID)
 	if err != nil {
 		return Outcome{}, &Failure{Code: "PLAN_INVALID", Err: err}
@@ -105,9 +98,25 @@ func Execute(targetPath, projectRoot, runID string, approval protocol.Approval) 
 			return failWithRollback(targetRoot, runDir, journal, created, err)
 		}
 		created = append(created, createdFile{Path: createdPath, ExpectedSHA256: operation.ExpectedSHA256, Directories: directories})
+		if inject != nil {
+			if err := inject("after-publish:" + filepath.ToSlash(operation.Path)); err != nil {
+				journal.Status = "RECOVERY_REQUIRED"
+				journal.Stage = "FILES_APPLYING"
+				_ = state.WriteJournal(runDir, journal)
+				return Outcome{}, &Failure{Code: "RECOVERY_REQUIRED", Err: err}
+			}
+		}
 		setOperationStatus(&journal, operation.Path, "APPLIED")
 		if err := state.WriteJournal(runDir, journal); err != nil {
 			return failWithRollback(targetRoot, runDir, journal, created, err)
+		}
+	}
+	if inject != nil {
+		if err := inject("before-validation"); err != nil {
+			journal.Status = "RECOVERY_REQUIRED"
+			journal.Stage = "FILES_APPLIED"
+			_ = state.WriteJournal(runDir, journal)
+			return Outcome{}, &Failure{Code: "RECOVERY_REQUIRED", Err: err}
 		}
 	}
 	for _, file := range created {
@@ -115,6 +124,13 @@ func Execute(targetPath, projectRoot, runID string, approval protocol.Approval) 
 		if err != nil || actual != file.ExpectedSHA256 {
 			return failWithRollback(targetRoot, runDir, journal, created, errors.New("created file validation failed"))
 		}
+	}
+	if err := validateCreatedFiles(targetRoot, plan, created); err != nil {
+		return failWithRollback(targetRoot, runDir, journal, created, err)
+	}
+	journal.Stage = "VALIDATED"
+	if err := state.WriteJournal(runDir, journal); err != nil {
+		return Outcome{}, &Failure{Code: "RECOVERY_REQUIRED", Err: err}
 	}
 	journal.Stage = "FINALIZED"
 	journal.Status = "FINALIZED"
@@ -154,21 +170,7 @@ func verifyStoredRun(runID string, plan protocol.SetupPlan, journal protocol.Run
 }
 
 func verifyApproval(runID string, plan protocol.SetupPlan, journal protocol.RunJournal, approval protocol.Approval) error {
-	if approval.SchemaVersion != 1 || approval.ApprovedAction != "APPLY_CREATE" {
-		return errors.New("unsupported approval")
-	}
-	if approval.RunID != runID || approval.PlanID != plan.PlanID || approval.SpecSHA256 != plan.SpecSHA256 || approval.TargetIdentitySHA256 != plan.Spec.TargetIdentitySHA256 {
-		return errors.New("approval binding mismatch")
-	}
-	approvedAt, err := time.Parse(time.RFC3339, approval.ApprovedAt)
-	if err != nil {
-		return errors.New("invalid approval timestamp")
-	}
-	startedAt, err := time.Parse(time.RFC3339Nano, journal.StartedAt)
-	if err != nil || approvedAt.Before(startedAt.Add(-time.Second)) || approvedAt.After(time.Now().UTC().Add(5*time.Minute)) {
-		return errors.New("approval timestamp is outside the run window")
-	}
-	return nil
+	return approvalcontract.Verify(approval, "APPLY_CREATE", runID, plan.PlanID, plan.SpecSHA256, plan.Spec.TargetIdentitySHA256, journal.StartedAt)
 }
 
 type stagedOperation struct {

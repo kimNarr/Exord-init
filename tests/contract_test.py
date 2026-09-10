@@ -9,7 +9,19 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 class ContractTests(unittest.TestCase):
     def test_all_schemas_are_valid_json_with_draft_marker(self):
         schema_paths = sorted((ROOT / "schemas").glob("*.schema.json"))
-        self.assertEqual(len(schema_paths), 6)
+        self.assertEqual(
+            {path.name for path in schema_paths},
+            {
+                "approval.schema.json",
+                "intent.schema.json",
+                "manifest.schema.json",
+                "plan.schema.json",
+                "recovery.schema.json",
+                "result.schema.json",
+                "retained-runs.schema.json",
+                "run.schema.json",
+            },
+        )
         for path in schema_paths:
             schema = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(schema["$schema"], "https://json-schema.org/draft/2020-12/schema")
@@ -40,6 +52,7 @@ class ContractTests(unittest.TestCase):
             for required in [
                 "CREATE + QUICK",
                 "ADOPT + QUICK",
+                "RECOVER_ROLLBACK",
                 "doctor --json",
                 "APPLY_CREATE",
                 "spec_sha256",
@@ -48,6 +61,24 @@ class ContractTests(unittest.TestCase):
             ]:
                 self.assertIn(required, content)
             self.assertIn("vibe-coding", content)
+
+    def test_readmes_list_every_engine_capability(self):
+        # engineCapabilities in engine/cmd/exord-init/main.go is the single
+        # source of truth; both READMEs must mention each capability token so
+        # the doctor output and the docs never drift apart.
+        source = (ROOT / "engine" / "cmd" / "exord-init" / "main.go").read_text(
+            encoding="utf-8"
+        )
+        block = source.split("engineCapabilities = []string{", 1)[1].split("}", 1)[0]
+        capabilities = [line.split('"')[1] for line in block.splitlines() if '"' in line]
+        self.assertEqual(len(capabilities), 7)
+        readmes = [
+            (ROOT / "README.md").read_text(encoding="utf-8"),
+            (ROOT / "README.ko.md").read_text(encoding="utf-8"),
+        ]
+        for content in readmes:
+            for capability in capabilities:
+                self.assertIn(capability, content)
 
 
 if __name__ == "__main__":

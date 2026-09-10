@@ -7,7 +7,7 @@
   "required": ["schema_version", "command", "status", "code", "message_key", "changed", "warnings", "next_actions"],
   "properties": {
     "schema_version": {"const": 1},
-    "command": {"enum": ["", "doctor", "plan", "apply"]},
+    "command": {"enum": ["", "doctor", "plan", "apply", "recover"]},
     "status": {"enum": ["OK", "BLOCKED", "FAILED"]},
     "code": {"type": "string", "minLength": 1},
     "message_key": {"type": "string", "minLength": 1},

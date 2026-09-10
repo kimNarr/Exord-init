@@ -20,11 +20,21 @@ import (
 var (
 	ErrLocked             = errors.New("project state is locked")
 	ErrUnsupportedGitFile = errors.New("gitfile state is unsupported")
+	errLockHeld           = errors.New("lock held by another process")
 )
 
 type Lock struct {
-	path string
-	file *os.File
+	path       string
+	file       *os.File
+	ownerToken string
+}
+
+type lockState struct {
+	SchemaVersion int    `json:"schema_version"`
+	RunID         string `json:"run_id"`
+	PID           int    `json:"pid"`
+	OwnerToken    string `json:"owner_token"`
+	CreatedAt     string `json:"created_at"`
 }
 
 type projectState struct {
@@ -63,36 +73,61 @@ func ExternalProjectRoot(identity string) (string, error) {
 	return filepath.Join(base, "projects", identity), nil
 }
 
+// Acquire takes the per-project run lock. The authority is an OS advisory lock
+// (flock / LockFileEx) held on the open lock file for the life of the process,
+// so an interrupted run cannot leave the project permanently locked: the kernel
+// releases the lock on exit and the next run reuses the leftover lock.json.
+// lock.json itself is diagnostic metadata (run ID, PID, owner token) and is not
+// the locking mechanism.
 func Acquire(projectRoot, runID string) (*Lock, error) {
 	if err := os.MkdirAll(projectRoot, 0700); err != nil {
 		return nil, errors.New("cannot create local state directory")
 	}
 	lockPath := filepath.Join(projectRoot, "lock.json")
-	file, err := os.OpenFile(lockPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	file, err := os.OpenFile(lockPath, os.O_RDWR|os.O_CREATE, 0600)
 	if err != nil {
-		if os.IsExist(err) {
+		return nil, errors.New("cannot open project lock")
+	}
+	if err := acquireOSLock(file.Fd()); err != nil {
+		file.Close()
+		if errors.Is(err, errLockHeld) {
 			return nil, ErrLocked
 		}
 		return nil, errors.New("cannot acquire project lock")
 	}
 	ownerToken, err := id.UUID4()
 	if err != nil {
+		releaseOSLock(file.Fd())
 		file.Close()
-		os.Remove(lockPath)
 		return nil, errors.New("cannot create lock owner token")
 	}
-	payload := map[string]any{"schema_version": 1, "run_id": runID, "pid": os.Getpid(), "owner_token": ownerToken, "created_at": time.Now().UTC().Format(time.RFC3339Nano)}
-	if err := json.NewEncoder(file).Encode(payload); err != nil {
+	payload := lockState{SchemaVersion: 1, RunID: runID, PID: os.Getpid(), OwnerToken: ownerToken, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano)}
+	if err := writeLockPayload(file, payload); err != nil {
+		releaseOSLock(file.Fd())
 		file.Close()
-		os.Remove(lockPath)
-		return nil, errors.New("cannot write project lock")
+		return nil, err
+	}
+	return &Lock{path: lockPath, file: file, ownerToken: ownerToken}, nil
+}
+
+func writeLockPayload(file *os.File, payload lockState) error {
+	if err := file.Truncate(0); err != nil {
+		return errors.New("cannot reset project lock")
+	}
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return errors.New("cannot reset project lock")
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	if _, err := file.Write(append(data, '\n')); err != nil {
+		return errors.New("cannot write project lock")
 	}
 	if err := file.Sync(); err != nil {
-		file.Close()
-		os.Remove(lockPath)
-		return nil, errors.New("cannot sync project lock")
+		return errors.New("cannot sync project lock")
 	}
-	return &Lock{path: lockPath, file: file}, nil
+	return nil
 }
 
 // ProjectID returns the stable random identity for a not-yet-initialized
@@ -118,16 +153,44 @@ func ProjectID(projectRoot string) (string, error) {
 	return projectID, nil
 }
 
+// Release drops the OS advisory lock and removes lock.json. Because the OS lock
+// is gone the moment the handle closes, a Release failure here only means the
+// diagnostic lock.json could not be deleted; the caller treats that as a
+// warning on an otherwise finished run, never as a recovery-required state. The
+// owner-token check still refuses to delete a lock.json a concurrent writer
+// replaced.
 func (lock *Lock) Release() error {
 	if lock == nil {
 		return nil
 	}
-	closeErr := lock.file.Close()
-	removeErr := os.Remove(lock.path)
-	if closeErr != nil {
+	// Read the token back through our own locked handle. On Windows the range
+	// lock is mandatory, so a second os.ReadFile of the path would fail while
+	// the lock is still held; reading the open handle avoids that and still
+	// detects a lock.json a concurrent writer replaced in place.
+	ownershipOK := lock.ownsLockFile()
+	releaseOSLock(lock.file.Fd())
+	if closeErr := lock.file.Close(); closeErr != nil {
 		return closeErr
 	}
-	return removeErr
+	if !ownershipOK {
+		return errors.New("project lock ownership changed")
+	}
+	return os.Remove(lock.path)
+}
+
+func (lock *Lock) ownsLockFile() bool {
+	if _, err := lock.file.Seek(0, io.SeekStart); err != nil {
+		return false
+	}
+	data, err := io.ReadAll(lock.file)
+	if err != nil {
+		return false
+	}
+	var stored lockState
+	if err := json.Unmarshal(data, &stored); err != nil {
+		return false
+	}
+	return stored.SchemaVersion == 1 && stored.OwnerToken == lock.ownerToken
 }
 
 func PersistPrepared(projectRoot, runID string, prepared planner.PreparedPlan) (protocol.RunJournal, error) {

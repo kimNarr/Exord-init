@@ -11,7 +11,7 @@
     "plan_id": {"type": "string", "format": "uuid"},
     "spec_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "target_identity_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-    "approved_action": {"const": "APPLY_CREATE"},
+    "approved_action": {"enum": ["APPLY_CREATE", "RECOVER_ROLLBACK"]},
     "approved_at": {"type": "string", "format": "date-time"}
   }
 }

@@ -20,6 +20,19 @@ type Inspection struct {
 	Entries        []string `json:"entries"`
 }
 
+type IdentityInspection struct {
+	Path           string `json:"path"`
+	IdentitySHA256 string `json:"identity_sha256"`
+}
+
+func InspectIdentity(path string) (IdentityInspection, error) {
+	abs, resolved, err := resolveSafeRoot(path)
+	if err != nil {
+		return IdentityInspection{}, err
+	}
+	return IdentityInspection{Path: abs, IdentitySHA256: targetIdentity(resolved)}, nil
+}
+
 func InspectCreate(path string) (Inspection, error) {
 	abs, resolved, err := resolveSafeRoot(path)
 	if err != nil {

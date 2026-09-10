@@ -75,6 +75,27 @@ type Conflict struct {
 	Options []string `json:"options"`
 }
 
+type RecoveryOperationAnalysis struct {
+	Path           string `json:"path"`
+	JournalStatus  string `json:"journal_status"`
+	CurrentState   string `json:"current_state"`
+	RecoveryAction string `json:"recovery_action"`
+}
+
+type RecoveryAnalysis struct {
+	SchemaVersion int                         `json:"schema_version"`
+	RunID         string                      `json:"run_id"`
+	PlanID        string                      `json:"plan_id"`
+	SpecSHA256    string                      `json:"spec_sha256"`
+	Status        string                      `json:"status"`
+	Stage         string                      `json:"stage"`
+	Disposition   string                      `json:"disposition"`
+	Recoverable   int                         `json:"recoverable"`
+	AlreadyAbsent int                         `json:"already_absent"`
+	Conflicts     int                         `json:"conflicts"`
+	Operations    []RecoveryOperationAnalysis `json:"operations"`
+}
+
 type AdoptAnalysis struct {
 	Inventory InventorySummary   `json:"inventory"`
 	Git       GitAnalysis        `json:"git"`
