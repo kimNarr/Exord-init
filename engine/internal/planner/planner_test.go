@@ -103,7 +103,12 @@ func TestStableProjectIDProducesStableSpecHash(t *testing.T) {
 }
 
 func TestBuildAdoptProposesOnlyMissingFilesAndClassifiesConflict(t *testing.T) {
-	dir := t.TempDir()
+	// Resolve links so target inspection accepts the path on Windows/macOS CI,
+	// where t.TempDir returns a short-name or /var-symlinked path.
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("user rules\n"), 0600); err != nil {
 		t.Fatal(err)
 	}

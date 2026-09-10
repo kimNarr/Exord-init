@@ -91,7 +91,12 @@ func TestRollbackRefusesModifiedGeneratedFileWithoutMutation(t *testing.T) {
 
 func recoveryFixture(t *testing.T, matching bool) (string, string, planner.PreparedPlan, protocol.Operation) {
 	t.Helper()
-	targetPath := t.TempDir()
+	// Resolve links so target inspection accepts the path on Windows/macOS CI,
+	// where t.TempDir returns a short-name or /var-symlinked path.
+	targetPath, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 	inspection, err := target.InspectCreate(targetPath)
 	if err != nil {
 		t.Fatal(err)

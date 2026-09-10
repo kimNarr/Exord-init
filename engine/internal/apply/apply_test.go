@@ -191,7 +191,12 @@ func sha256Hex(content []byte) string {
 
 func prepareRun(t *testing.T) (string, string, string, planner.PreparedPlan) {
 	t.Helper()
-	targetPath := t.TempDir()
+	// Resolve links so target inspection accepts the path on Windows/macOS CI,
+	// where t.TempDir returns a short-name or /var-symlinked path.
+	targetPath, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := os.Mkdir(filepath.Join(targetPath, ".git"), 0700); err != nil {
 		t.Fatal(err)
 	}

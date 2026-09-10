@@ -13,7 +13,7 @@ import (
 )
 
 func TestInspectAdoptClassifiesInventoryGitTaskAndSecrets(t *testing.T) {
-	dir := t.TempDir()
+	dir := canonicalTempDir(t)
 	writeTestFile(t, dir, "AGENTS.md", "user rules\n")
 	writeTestFile(t, dir, "TASK.md", "personal task notes\n")
 	writeTestFile(t, dir, ".env", "EXAMPLE_ONLY=value\n")
@@ -51,7 +51,7 @@ func TestInspectAdoptClassifiesInventoryGitTaskAndSecrets(t *testing.T) {
 }
 
 func TestInspectAdoptFingerprintChangesWithKnownFileContent(t *testing.T) {
-	dir := t.TempDir()
+	dir := canonicalTempDir(t)
 	writeTestFile(t, dir, "AGENTS.md", "first\n")
 	first, err := InspectAdopt(dir)
 	if err != nil {
@@ -68,7 +68,7 @@ func TestInspectAdoptFingerprintChangesWithKnownFileContent(t *testing.T) {
 }
 
 func TestInspectAdoptPreservesManifestIdentityAndManagedBaseline(t *testing.T) {
-	dir := t.TempDir()
+	dir := canonicalTempDir(t)
 	content := "managed rules\n"
 	writeTestFile(t, dir, "AGENTS.md", content)
 	sum := sha256.Sum256([]byte(content))
@@ -87,7 +87,7 @@ func TestInspectAdoptPreservesManifestIdentityAndManagedBaseline(t *testing.T) {
 }
 
 func TestInspectAdoptStopsAtNestedGitBoundary(t *testing.T) {
-	dir := t.TempDir()
+	dir := canonicalTempDir(t)
 	writeTestFile(t, dir, "nested/.git/HEAD", "ref: refs/heads/main\n")
 	writeTestFile(t, dir, "nested/.env", "SECRET=value\n")
 	inspection, err := InspectAdopt(dir)
@@ -110,7 +110,7 @@ func TestInspectAdoptDetectsRebaseDirectory(t *testing.T) {
 	if err != nil {
 		t.Skip("Git CLI is unavailable")
 	}
-	dir := t.TempDir()
+	dir := canonicalTempDir(t)
 	command := exec.Command(gitPath, "-C", dir, "init", "-b", "main")
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v: %s", err, output)
