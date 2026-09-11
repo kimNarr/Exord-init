@@ -38,6 +38,7 @@ AI를 활용해 프로젝트를 시작하면 제품 경계를 이해하기 전�
 | 읽기 전용 `ADOPT + QUICK` inventory 및 충돌 계획 | 구현됨 |
 | 복구 검사 및 별도 승인에 결합된 rollback | 구현됨 |
 | `recover list` 잔여 run 발견과 복구 필요 run 존재 시 plan 차단 | 구현됨 |
+| 정착된(rolled-back·finalized·미적용) run에 대한 승인 결합 `recover discard` | 구현됨 |
 | 완료 전 실행되는 선언된 apply 검증(`agents-size`, `manifest-schema`, `project-required-sections`) | 구현됨 |
 | 테스트 전용 fault injection(현재 2단계: 파일 publication 이후, 검증 직전) | 구현됨 |
 | Upgrade 계획 및 추가 fault 단계 | 남은 v0.4 작업으로 계획됨 |
@@ -95,7 +96,7 @@ go build -trimpath -o .\bin\exord-init.exe .\engine\cmd\exord-init
 .\bin\exord-init.exe doctor --json
 ```
 
-`doctor` 결과에서 protocol version `1`, `plan:create-quick`, `apply:create-quick`, `plan:adopt-quick`, `recover:inspect`, `recover:rollback`, `recover:list` capability를 확인할 수 있어야 합니다.
+`doctor` 결과에서 protocol version `1`, `plan:create-quick`, `apply:create-quick`, `plan:adopt-quick`, `recover:inspect`, `recover:rollback`, `recover:list`, `recover:discard` capability를 확인할 수 있어야 합니다.
 
 ## 빠른 시작: `CREATE + QUICK`
 
@@ -219,7 +220,19 @@ Rollback에는 같은 run, plan, spec hash, target identity 및 정확한 `RECOV
   --json
 ```
 
-복구는 각 파일을 제거하기 직전에 다시 검사하고 모든 단계를 journal에 기록합니다. 빈 디렉터리는 의도적으로 남기며 실패한 run bundle도 향후 명시적 처리 전까지 보존합니다. `recover list`는 보존된 bundle을 보고하며, 승인형 `recover discard`와 finalized 상태 cleanup은 이번 슬라이스에서 구현하지 않습니다.
+복구는 각 파일을 제거하기 직전에 다시 검사하고 모든 단계를 journal에 기록합니다. 빈 디렉터리는 의도적으로 남기며 실패한 run bundle도 향후 명시적 처리 전까지 보존합니다.
+
+run이 정착되면 — rollback 완료(`FAILED`), apply 완료(`FINALIZED`), 미적용(`PLANNED`/`APPROVED`) — `recover discard`가 그 bundle을 영구 제거합니다. 같은 run·plan·spec hash·target에 결합되고 정확한 `RECOVER_DISCARD` action을 가진 승인이 필요하며, `RECOVERY_REQUIRED`나 apply 중단 run은 거부하고, 실제 제거 여부를 보고합니다.
+
+```sh
+./bin/exord-init recover discard \
+  --target ../my-project \
+  --run-id <run_id> \
+  --approval ./discard-approval.json \
+  --json
+```
+
+대상 자체의 finalized 상태 cleanup은 이번 슬라이스에서 구현하지 않습니다.
 
 ## 생성되는 프로젝트 파일
 
@@ -313,7 +326,7 @@ EXORD_INIT_BIN=./bin/exord-init python -m unittest discover -s tests -p '*_test.
 1. v0.1: 읽기 전용 `doctor`와 `CREATE + QUICK` 계획 — 구현됨
 2. v0.2: 안전한 `CREATE + QUICK` plan-bound apply — 구현됨
 3. v0.3: 읽기 전용 `ADOPT` inventory, 충돌 분석, Task 및 Git 분석 — 구현됨
-4. v0.4: 복구 명령, upgrade 동작과 fault injection — 복구 검사, 승인형 rollback, `recover list` 발견과 plan 사전 차단, 선언된 apply 검증 실행과 두 apply fault 지점은 구현됐으며 `recover discard`, upgrade와 나머지 fault matrix는 남아 있음
+4. v0.4: 복구 명령, upgrade 동작과 fault injection — 복구 검사, 승인형 rollback, `recover list` 발견과 plan 사전 차단, 정착 run에 대한 승인형 `recover discard`, 선언된 apply 검증 실행과 두 apply fault 지점은 구현됐으며 finalized 상태 cleanup, upgrade와 나머지 fault matrix는 남아 있음
 5. 이후: 검증된 외부 백업과 별도 파괴적 승인을 요구하는 `REINITIALIZE`
 
 이 로드맵은 구현 순서를 나타내며 릴리스 일정을 약속하지 않습니다.

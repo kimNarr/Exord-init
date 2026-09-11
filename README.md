@@ -38,6 +38,7 @@ AI-assisted projects often accumulate framework choices, duplicated instructions
 | Read-only `ADOPT + QUICK` inventory and conflict plan | Implemented |
 | Recovery inspection and approval-bound rollback | Implemented |
 | `recover list` retained-run discovery and pre-plan blocking on recovery-required runs | Implemented |
+| Approval-bound `recover discard` for settled (rolled-back, finalized, never-applied) runs | Implemented |
 | Declared apply validations (`agents-size`, `manifest-schema`, `project-required-sections`) executed before finalization | Implemented |
 | Test-only fault injection (currently 2 stages: after publication, before validation) | Implemented |
 | Upgrade planning and additional fault stages | Planned for the remaining v0.4 work |
@@ -95,7 +96,7 @@ go build -trimpath -o .\bin\exord-init.exe .\engine\cmd\exord-init
 .\bin\exord-init.exe doctor --json
 ```
 
-`doctor` should report protocol version `1` and the `plan:create-quick`, `apply:create-quick`, `plan:adopt-quick`, `recover:inspect`, `recover:rollback`, and `recover:list` capabilities.
+`doctor` should report protocol version `1` and the `plan:create-quick`, `apply:create-quick`, `plan:adopt-quick`, `recover:inspect`, `recover:rollback`, `recover:list`, and `recover:discard` capabilities.
 
 ## Quick start: `CREATE + QUICK`
 
@@ -219,7 +220,19 @@ Rollback requires a separate approval document bound to the same run, plan, spec
   --json
 ```
 
-Recovery rechecks each file immediately before removal and journals every step. It deliberately leaves empty directories and retains the failed run bundle for later explicit disposition. `recover list` reports retained bundles; an approval-gated `recover discard` and finalized-state cleanup are not implemented in this slice.
+Recovery rechecks each file immediately before removal and journals every step. It deliberately leaves empty directories and retains the failed run bundle for later explicit disposition.
+
+Once a run is settled — rolled back (`FAILED`), applied (`FINALIZED`), or never applied (`PLANNED`/`APPROVED`) — `recover discard` permanently removes its bundle. It requires an approval bound to the same run, plan, spec hash, and target with the exact `RECOVER_DISCARD` action, refuses any `RECOVERY_REQUIRED` or interrupted mid-apply run, and reports whether the bundle was actually removed:
+
+```sh
+./bin/exord-init recover discard \
+  --target ../my-project \
+  --run-id <run_id> \
+  --approval ./discard-approval.json \
+  --json
+```
+
+Finalized-state cleanup of the target itself is not implemented in this slice.
 
 ## Generated project files
 
@@ -250,7 +263,7 @@ GEMINI.md              Thin Gemini CLI bridge, when requested
 - `REINITIALIZE` and permanent deletion remain disabled.
 - ADOPT is analysis-only and cannot be applied in the current prototype.
 - Recovery rollback removes only journaled CREATE outputs whose current SHA-256 still matches the stored plan; conflicts block mutation.
-- Recovery approval is independent from the original CREATE approval and is bound to `RECOVER_ROLLBACK`.
+- Recovery approval is independent from the original CREATE approval and is bound to `RECOVER_ROLLBACK`; `recover discard` needs its own `RECOVER_DISCARD` approval and only acts on settled runs.
 
 See [the safety contract](docs/spec/safety.md) and [protocol contract](docs/spec/protocol.md) for the public implementation boundaries.
 
@@ -313,7 +326,7 @@ The planned risk-ordered implementation sequence is:
 1. v0.1: read-only `doctor` and `CREATE + QUICK` planning — implemented.
 2. v0.2: safe `CREATE + QUICK` plan-bound apply — implemented.
 3. v0.3: read-only `ADOPT` inventory, conflict analysis, Task and Git analysis — implemented.
-4. v0.4: recovery commands, upgrade behavior, and fault injection — recovery inspection, approved rollback, `recover list` discovery with pre-plan blocking, declared apply-validation execution, and two apply fault points are implemented; `recover discard`, upgrade, and the remaining fault matrix are pending.
+4. v0.4: recovery commands, upgrade behavior, and fault injection — recovery inspection, approved rollback, `recover list` discovery with pre-plan blocking, approval-bound `recover discard` for settled runs, declared apply-validation execution, and two apply fault points are implemented; finalized-state cleanup, upgrade, and the remaining fault matrix are pending.
 5. Later: `REINITIALIZE` with verified external backup and separately approved destructive options.
 
 This roadmap describes implementation order, not a release commitment.

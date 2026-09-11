@@ -113,6 +113,46 @@ func Rollback(targetPath, projectRoot, runID string, approval protocol.Approval)
 	return final, changed, nil
 }
 
+// Discard permanently removes one retained run bundle. It is allowed only for a
+// settled run — a rolled-back FAILED run, a FINALIZED run whose cleanup did not
+// complete, or an ACTIVE plan that was never applied — so it can never erase
+// RECOVERY_REQUIRED evidence or a run that is still mid-apply. It requires a
+// RECOVER_DISCARD approval bound to the same run, plan, spec hash, and target,
+// verifies the stored plan the same way rollback does, and reports whether the
+// bundle was actually removed.
+func Discard(targetPath, projectRoot, runID string, approval protocol.Approval) (bool, *Failure) {
+	value, failure := load(targetPath, projectRoot, runID)
+	if failure != nil {
+		return false, failure
+	}
+	if !discardableState(value.journal) {
+		return false, &Failure{Code: "DISCARD_NOT_ALLOWED", Err: errors.New("run is not in a settled state; roll it back or finish recovery first")}
+	}
+	if err := approvalcontract.Verify(approval, "RECOVER_DISCARD", runID, value.plan.PlanID, value.plan.SpecSHA256, value.plan.Spec.TargetIdentitySHA256, value.journal.StartedAt); err != nil {
+		return false, &Failure{Code: "APPROVAL_MISMATCH", Err: err}
+	}
+	removed, err := state.DiscardRun(projectRoot, runID)
+	if err != nil {
+		// removed reports whether anything was deleted before the failure.
+		return removed, &Failure{Code: "DISCARD_INCOMPLETE", Err: err, Changed: removed}
+	}
+	return removed, nil
+}
+
+// discardableState is the allowlist of journal states a discard may remove.
+// RECOVERY_REQUIRED, BLOCKED, and any interrupted mid-apply ACTIVE run are
+// intentionally excluded.
+func discardableState(journal protocol.RunJournal) bool {
+	switch journal.Status {
+	case "FAILED", "FINALIZED":
+		return true
+	case "ACTIVE":
+		return journal.Stage == "PLANNED" || journal.Stage == "APPROVED"
+	default:
+		return false
+	}
+}
+
 func load(targetPath, projectRoot, runID string) (loaded, *Failure) {
 	identity, err := target.InspectIdentity(targetPath)
 	if err != nil {

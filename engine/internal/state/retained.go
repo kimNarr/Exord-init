@@ -97,6 +97,38 @@ func classifyRetainedRun(runsDir, runID string) RetainedRun {
 	return run
 }
 
+// DiscardRun removes one run bundle directory. It refuses to act on a path that
+// is not a plain directory (for example a symlink swapped in for the bundle),
+// and reports whether anything was actually deleted so a partial removal is
+// never reported as a clean discard. os.RemoveAll does not descend through
+// symlinks, so a link planted inside the bundle cannot redirect the deletion.
+func DiscardRun(projectRoot, runID string) (bool, error) {
+	runDir, err := RunDirectory(projectRoot, runID)
+	if err != nil {
+		return false, err
+	}
+	info, err := os.Lstat(runDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, errors.New("run bundle does not exist")
+		}
+		return false, errors.New("cannot inspect run bundle")
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return false, errors.New("run bundle path is not a plain directory")
+	}
+	if err := os.RemoveAll(runDir); err != nil {
+		// RemoveAll deletes bottom-up, so a failure may have already removed
+		// staged files. Report the bundle as changed and let the caller
+		// surface it as an incomplete discard rather than a clean one.
+		return true, errors.New("cannot remove run bundle")
+	}
+	if _, statErr := os.Stat(runDir); !os.IsNotExist(statErr) {
+		return true, errors.New("run bundle was only partially removed")
+	}
+	return true, nil
+}
+
 // BlockingRetainedRuns returns the subset of runs that must be resolved before
 // a new mutating plan may proceed.
 func BlockingRetainedRuns(runs []RetainedRun) []RetainedRun {

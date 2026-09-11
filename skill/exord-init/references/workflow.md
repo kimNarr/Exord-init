@@ -8,7 +8,7 @@
 
 Never change the selected purpose because inspection found unexpected files. Stop and ask the user to choose.
 
-`recover list` and `plan` both scan for retained runs. If `plan` returns `BLOCKED`, or `recover list` shows a run with `blocks_new_plan`, inspect and resolve that run before proposing a new mutating plan. Do not reinterpret the original CREATE approval as recovery approval.
+`recover list` and `plan` both scan for retained runs. If `plan` returns `BLOCKED`, or `recover list` shows a run with `blocks_new_plan`, inspect and resolve that run before proposing a new mutating plan. A settled run may then be removed with `recover discard` under its own `RECOVER_DISCARD` approval. Do not reinterpret the original CREATE approval as recovery approval.
 
 ## Depth selection
 

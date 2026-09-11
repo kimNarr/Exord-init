@@ -98,6 +98,46 @@ func TestListRetainedRunsFailsClosedOnUnparseableJournal(t *testing.T) {
 	}
 }
 
+func TestDiscardRunRemovesBundleAndReportsChange(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "state")
+	writeRunJournal(t, root, runA, journalFor(runA, "FAILED", "ROLLED_BACK", "2026-09-10T00:00:00Z"))
+	if err := os.WriteFile(filepath.Join(root, "runs", runA, "plan.json"), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	removed, err := DiscardRun(root, runA)
+	if err != nil || !removed {
+		t.Fatalf("expected clean discard, got removed=%v err=%v", removed, err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "runs", runA)); !os.IsNotExist(err) {
+		t.Fatalf("bundle still present: %v", err)
+	}
+}
+
+func TestDiscardRunRefusesMissingBundle(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "state")
+	if removed, err := DiscardRun(root, runA); err == nil || removed {
+		t.Fatalf("expected missing-bundle refusal, got removed=%v err=%v", removed, err)
+	}
+}
+
+func TestDiscardRunRefusesSymlinkedBundle(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "state")
+	if err := os.MkdirAll(filepath.Join(root, "runs"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	elsewhere := t.TempDir()
+	if err := os.Symlink(elsewhere, filepath.Join(root, "runs", runA)); err != nil {
+		t.Skipf("cannot create symlink on this host: %v", err)
+	}
+	removed, err := DiscardRun(root, runA)
+	if err == nil || removed {
+		t.Fatalf("expected symlinked bundle refusal, got removed=%v err=%v", removed, err)
+	}
+	if _, statErr := os.Stat(elsewhere); statErr != nil {
+		t.Fatalf("symlink target must be untouched: %v", statErr)
+	}
+}
+
 func TestListRetainedRunsIgnoresNonRunEntries(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "state")
 	writeRunJournal(t, root, runA, journalFor(runA, "FAILED", "ROLLED_BACK", "2026-09-10T00:00:00Z"))

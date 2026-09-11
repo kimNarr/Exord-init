@@ -343,6 +343,77 @@ class SchemaValidationTests(unittest.TestCase):
         finally:
             shutil.rmtree(target)
 
+    @unittest.skipUnless(os.environ.get("EXORD_INIT_BIN"), "set EXORD_INIT_BIN")
+    def test_binary_recover_discard_settled_run(self):
+        binary = os.environ["EXORD_INIT_BIN"]
+        intent = ROOT / "tests" / "fixtures" / "intent-create-quick-ko.json"
+        local_temp = ROOT / ".tools" / "test-fixtures"
+        local_temp.mkdir(parents=True, exist_ok=True)
+        suffix = uuid.uuid4().hex
+        target = local_temp / f"discard-{suffix}"
+        approval_path = local_temp / f"discard-approval-{suffix}.json"
+        target.mkdir()
+        (target / ".git").mkdir()
+
+        def run(*args, check=True):
+            return subprocess.run(
+                [binary, *args, "--json"],
+                check=check,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+
+        try:
+            plan_result = json.loads(
+                run("plan", "--intent", str(intent), "--target", str(target)).stdout
+            )
+            run_id = plan_result["run_id"]
+            run_dir = target / ".git" / "exord-init" / "runs" / run_id
+            journal_path = run_dir / "run.json"
+
+            approval = dict(plan_result["data"]["approval_request"])
+            approval["approved_action"] = "RECOVER_DISCARD"
+            approval["approved_at"] = (
+                datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            )
+            self.validate(approval, "approval.schema.json")
+            approval_path.write_text(json.dumps(approval), encoding="utf-8")
+
+            # A RECOVERY_REQUIRED run is refused (must be rolled back first).
+            journal = json.loads(journal_path.read_text(encoding="utf-8"))
+            journal["status"] = "RECOVERY_REQUIRED"
+            journal["stage"] = "FILES_APPLYING"
+            journal_path.write_text(json.dumps(journal), encoding="utf-8")
+            refused = run(
+                "recover", "discard", "--target", str(target),
+                "--run-id", run_id, "--approval", str(approval_path), check=False,
+            )
+            self.assertEqual(refused.returncode, 4)
+            self.assertEqual(json.loads(refused.stdout)["code"], "DISCARD_NOT_ALLOWED")
+            self.assertTrue(run_dir.exists())
+
+            # Once settled (FAILED), discard removes the bundle.
+            journal["status"] = "FAILED"
+            journal["stage"] = "ROLLED_BACK"
+            journal_path.write_text(json.dumps(journal), encoding="utf-8")
+            discarded = run(
+                "recover", "discard", "--target", str(target),
+                "--run-id", run_id, "--approval", str(approval_path),
+            )
+            discard_result = json.loads(discarded.stdout)
+            self.validate(discard_result, "result.schema.json")
+            self.assertTrue(discard_result["changed"])
+            self.assertTrue(discard_result["data"]["removed"])
+            self.assertFalse(run_dir.exists())
+
+            listed = json.loads(run("recover", "list", "--target", str(target)).stdout)
+            self.assertEqual(listed["data"]["retained_runs"], [])
+        finally:
+            if approval_path.exists():
+                approval_path.unlink()
+            shutil.rmtree(target)
+
 
 if __name__ == "__main__":
     unittest.main()

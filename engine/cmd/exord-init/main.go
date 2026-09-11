@@ -34,6 +34,7 @@ var engineCapabilities = []string{
 	"recover:inspect",
 	"recover:rollback",
 	"recover:list",
+	"recover:discard",
 }
 
 func main() {
@@ -305,7 +306,7 @@ func runApply(args []string) {
 }
 
 func runRecover(args []string) {
-	if len(args) == 0 || (args[0] != "inspect" && args[0] != "rollback" && args[0] != "list") {
+	if len(args) == 0 || (args[0] != "inspect" && args[0] != "rollback" && args[0] != "list" && args[0] != "discard") {
 		emit(failure("recover", "INVALID_INTENT", "error.recover_action", nil), 2)
 	}
 	action := args[0]
@@ -313,14 +314,15 @@ func runRecover(args []string) {
 		runRecoverList(args[1:])
 		return
 	}
+	needsApproval := action == "rollback" || action == "discard"
 	set := flag.NewFlagSet("recover "+action, flag.ContinueOnError)
 	targetPath := set.String("target", "", "target project directory")
-	runID := set.String("run-id", "", "run identifier to inspect or roll back")
+	runID := set.String("run-id", "", "run identifier to inspect, roll back, or discard")
 	approvalPath := set.String("approval", "", "path to a recovery approval JSON document")
 	expectedProtocol := set.Int("protocol-version", protocolVersion, "protocol version expected by the adapter")
 	jsonOutput := set.Bool("json", false, "emit JSON (output is always JSON)")
 	set.SetOutput(os.Stderr)
-	if err := set.Parse(args[1:]); err != nil || *targetPath == "" || *runID == "" || (action == "rollback" && *approvalPath == "") {
+	if err := set.Parse(args[1:]); err != nil || *targetPath == "" || *runID == "" || (needsApproval && *approvalPath == "") {
 		emit(failure("recover", "INVALID_INTENT", "error.recover_flags", nil), 2)
 	}
 	_ = jsonOutput
@@ -328,13 +330,17 @@ func runRecover(args []string) {
 		emit(failure("recover", "VERSION_MISMATCH", "error.protocol_version", nil), 7)
 	}
 	var recoveryApproval protocol.Approval
-	if action == "rollback" {
+	if needsApproval {
+		wantAction := "RECOVER_ROLLBACK"
+		if action == "discard" {
+			wantAction = "RECOVER_DISCARD"
+		}
 		raw, err := os.ReadFile(*approvalPath)
 		if err != nil {
 			emit(failure("recover", "INVALID_INTENT", "error.approval_read", err), 2)
 		}
 		recoveryApproval, err = approvalcontract.Decode(raw)
-		if err != nil || recoveryApproval.ApprovedAction != "RECOVER_ROLLBACK" {
+		if err != nil || recoveryApproval.ApprovedAction != wantAction {
 			emit(failure("recover", "INVALID_INTENT", "error.approval_invalid", err), 2)
 		}
 	}
@@ -369,6 +375,33 @@ func runRecover(args []string) {
 			warnings = append(warnings, lockFileWarning)
 		}
 		result := protocol.Result{SchemaVersion: 1, Command: "recover", Status: "OK", Code: "OK", MessageKey: "recover.inspected", RunID: &analysis.RunID, PlanID: &analysis.PlanID, SpecSHA256: &analysis.SpecSHA256, Changed: false, Warnings: warnings, NextActions: recoveryNextActions(analysis), Data: map[string]any{"recovery": analysis}}
+		emit(result, 0)
+	}
+	if action == "discard" {
+		removed, discardFailure := recoveryengine.Discard(identity.Path, projectRoot, *runID, recoveryApproval)
+		if discardFailure != nil {
+			_ = lock.Release()
+			exitCode := 5
+			if discardFailure.Code == "DISCARD_INCOMPLETE" {
+				exitCode = 6
+			} else if discardFailure.Code == "DISCARD_NOT_ALLOWED" {
+				exitCode = 4
+			}
+			result := failure("recover", discardFailure.Code, "error.recovery_failed", discardFailure.Err)
+			result.Changed = discardFailure.Changed
+			result.NextActions = []string{"run exord-init recover list for the current disposition", "roll back or finish recovery before discarding a non-settled run"}
+			emit(result, exitCode)
+		}
+		warnings := []string{}
+		if err := lock.Release(); err != nil {
+			warnings = append(warnings, lockFileWarning)
+		}
+		result := protocol.Result{
+			SchemaVersion: 1, Command: "recover", Status: "OK", Code: "OK", MessageKey: "recover.discarded",
+			RunID: runID, Changed: removed, Warnings: warnings,
+			NextActions: []string{"run exord-init recover list to confirm the remaining runs"},
+			Data:        map[string]any{"discarded_run_id": *runID, "removed": removed},
+		}
 		emit(result, 0)
 	}
 	analysis, changed, recoveryFailure := recoveryengine.Rollback(identity.Path, projectRoot, *runID, recoveryApproval)

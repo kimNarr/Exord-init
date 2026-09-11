@@ -28,7 +28,7 @@ func Decode(data []byte) (protocol.Approval, error) {
 	if err := decoder.Decode(&trailing); err != io.EOF {
 		return value, errors.New("approval contains trailing JSON values")
 	}
-	if value.SchemaVersion != 1 || (value.ApprovedAction != "APPLY_CREATE" && value.ApprovedAction != "RECOVER_ROLLBACK") {
+	if value.SchemaVersion != 1 || (value.ApprovedAction != "APPLY_CREATE" && value.ApprovedAction != "RECOVER_ROLLBACK" && value.ApprovedAction != "RECOVER_DISCARD") {
 		return value, errors.New("unsupported approval")
 	}
 	if _, err := time.Parse(time.RFC3339, value.ApprovedAt); err != nil {
