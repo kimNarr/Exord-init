@@ -31,6 +31,7 @@ var engineCapabilities = []string{
 	"plan:create-quick",
 	"apply:create-quick",
 	"plan:adopt-quick",
+	"plan:upgrade",
 	"recover:inspect",
 	"recover:rollback",
 	"recover:list",
@@ -83,15 +84,20 @@ func runPlan(args []string) {
 	set := flag.NewFlagSet("plan", flag.ContinueOnError)
 	intentPath := set.String("intent", "", "path to SetupIntent JSON")
 	targetPath := set.String("target", "", "target project directory")
+	upgrade := set.Bool("upgrade", false, "produce a read-only upgrade plan for an existing exord-init project")
 	expectedProtocol := set.Int("protocol-version", protocolVersion, "protocol version expected by the adapter")
 	jsonOutput := set.Bool("json", false, "emit JSON (output is always JSON)")
 	set.SetOutput(os.Stderr)
-	if err := set.Parse(args); err != nil || *intentPath == "" || *targetPath == "" {
+	if err := set.Parse(args); err != nil || *targetPath == "" || (!*upgrade && *intentPath == "") {
 		emit(failure("plan", "INVALID_INTENT", "error.plan_flags", nil), 2)
 	}
 	_ = jsonOutput
 	if *expectedProtocol != protocolVersion {
 		emit(failure("plan", "VERSION_MISMATCH", "error.protocol_version", nil), 7)
+	}
+	if *upgrade {
+		runUpgradePlan(*targetPath)
+		return
 	}
 	raw, err := os.ReadFile(*intentPath)
 	if err != nil {
@@ -242,6 +248,50 @@ func runAdoptPlan(intent protocol.SetupIntent, targetPath string) {
 		Warnings:    warnings,
 		NextActions: []string{"review inventory and Git/Task analysis", "classify every conflict as diff, skip, alternate path, keep, or review update", "prepare a new plan after resolving required choices"},
 		Data:        map[string]any{"inspection": inspection, "plan": plan},
+	}
+	emit(result, 0)
+}
+
+func runUpgradePlan(targetPath string) {
+	inspection, err := target.InspectUpgrade(targetPath)
+	if err != nil {
+		if errors.Is(err, target.ErrManifestSchemaUnsupported) {
+			emit(failure("plan", "VERSION_MISMATCH", "error.manifest_schema", err), 7)
+		}
+		if errors.Is(err, target.ErrNotExordProject) {
+			emit(failure("plan", "UNSUPPORTED_TARGET", "error.not_exord_project", err), 4)
+		}
+		emit(failure("plan", "UNSUPPORTED_TARGET", "error.target_unsafe", err), 4)
+	}
+	plan, err := planner.BuildUpgrade(inspection)
+	if err != nil {
+		emit(failure("plan", "INTERNAL_ERROR", "error.plan_build", err), 10)
+	}
+	analysis := plan.Spec.UpgradeAnalysis
+	warnings := []string{"read-only upgrade analysis; the project was not modified"}
+	switch analysis.Disposition {
+	case "BLOCKED":
+		warnings = append(warnings, "a managed file or the generator version blocks an automatic upgrade; resolve it before any upgrade apply")
+	case "REVIEW_REQUIRED":
+		warnings = append(warnings, "one or more managed files need manual review before an upgrade")
+	}
+	if analysis.Generator.Direction == "UNKNOWN" {
+		warnings = append(warnings, "the manifest generator version could not be parsed; the upgrade direction is unknown")
+	}
+	if !analysis.GitConsistent {
+		warnings = append(warnings, "the manifest git_mode no longer matches the target's Git state")
+	}
+	if createRoot, rootErr := state.ProjectRoot(inspection.Path, inspection.IdentitySHA256); rootErr == nil {
+		if retained, listErr := state.ListRetainedRuns(createRoot); listErr == nil {
+			warnings = append(warnings, retainedRunWarnings(retained)...)
+		}
+	}
+	result := protocol.Result{
+		SchemaVersion: 1, Command: "plan", Status: "OK", Code: "OK", MessageKey: "plan.upgrade_ready",
+		PlanID: &plan.PlanID, SpecSHA256: &plan.SpecSHA256, Changed: false,
+		Warnings:    warnings,
+		NextActions: []string{"review every managed-file upgrade action and the generator direction", "upgrade apply is not implemented in the current slice"},
+		Data:        map[string]any{"plan": plan},
 	}
 	emit(result, 0)
 }

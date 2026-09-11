@@ -14,7 +14,7 @@
       "additionalProperties": false,
       "required": ["mode", "depth", "project_id", "target_identity_sha256", "target_fingerprint", "operations", "validation", "risk_summary"],
       "properties": {
-        "mode": {"enum": ["CREATE", "ADOPT", "REINITIALIZE"]},
+        "mode": {"enum": ["CREATE", "ADOPT", "REINITIALIZE", "UPGRADE"]},
         "depth": {"enum": ["QUICK", "CUSTOM"]},
         "project_id": {"type": "string", "format": "uuid"},
         "target_identity_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
@@ -22,7 +22,8 @@
         "operations": {"type": "array", "items": {"$ref": "#/$defs/operation"}},
         "validation": {"type": "array", "items": {"$ref": "#/$defs/validation"}},
         "risk_summary": {"$ref": "#/$defs/riskSummary"},
-        "adopt_analysis": {"$ref": "#/$defs/adoptAnalysis"}
+        "adopt_analysis": {"$ref": "#/$defs/adoptAnalysis"},
+        "upgrade_analysis": {"$ref": "#/$defs/upgradeAnalysis"}
       }
     },
     "spec_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
@@ -136,6 +137,54 @@
         "path": {"type": "string", "minLength": 1},
         "reason": {"type": "string", "minLength": 1},
         "options": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["DIFF", "SKIP", "ALTERNATE_PATH", "KEEP", "REVIEW_UPDATE"]}}
+      }
+    },
+    "upgradeAnalysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manifest_schema_version", "generator", "settings", "git_consistent", "files", "disposition"],
+      "properties": {
+        "manifest_schema_version": {"const": 1},
+        "generator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["recorded", "current", "direction"],
+          "properties": {
+            "recorded": {"type": "string"},
+            "current": {"type": "string"},
+            "direction": {"enum": ["UPGRADE", "SAME", "DOWNGRADE", "UNKNOWN"]}
+          }
+        },
+        "settings": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["git_mode", "branch_profile", "documentation_language", "supported_agents"],
+          "properties": {
+            "git_mode": {"type": "string"},
+            "branch_profile": {"type": "string"},
+            "documentation_language": {"type": "string"},
+            "supported_agents": {"type": "array", "items": {"type": "string"}}
+          }
+        },
+        "git_consistent": {"type": "boolean"},
+        "disposition": {"enum": ["UP_TO_DATE", "UPGRADE_AVAILABLE", "REVIEW_REQUIRED", "BLOCKED"]},
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "template_id", "update_policy", "recorded_template_version", "current_template_version", "local_state", "upgrade_action"],
+            "properties": {
+              "path": {"type": "string", "minLength": 1},
+              "template_id": {"type": "string"},
+              "update_policy": {"type": "string"},
+              "recorded_template_version": {"type": "integer", "minimum": 0},
+              "current_template_version": {"type": "integer", "minimum": 0},
+              "local_state": {"enum": ["REGULAR", "SYMLINK", "MISSING", "TYPE_CONFLICT", "UNREADABLE", "UNKNOWN_HASH_MODE", "UNTRACKED_BY_MANIFEST"]},
+              "upgrade_action": {"enum": ["UP_TO_DATE", "TEMPLATE_UPDATE_AVAILABLE", "PROPOSE_ONLY_UPDATE", "REVIEW_LOCAL_EDIT", "RECREATE_MISSING", "NEW_MANAGED_FILE", "ADOPT_EXISTING_FILE", "ORPHAN_MANAGED_FILE", "BLOCKED"]}
+            }
+          }
+        }
       }
     }
   }

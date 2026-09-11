@@ -71,7 +71,7 @@ class ContractTests(unittest.TestCase):
         )
         block = source.split("engineCapabilities = []string{", 1)[1].split("}", 1)[0]
         capabilities = [line.split('"')[1] for line in block.splitlines() if '"' in line]
-        self.assertEqual(len(capabilities), 8)
+        self.assertEqual(len(capabilities), 9)
         readmes = [
             (ROOT / "README.md").read_text(encoding="utf-8"),
             (ROOT / "README.ko.md").read_text(encoding="utf-8"),

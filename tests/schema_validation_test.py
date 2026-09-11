@@ -414,6 +414,75 @@ class SchemaValidationTests(unittest.TestCase):
                 approval_path.unlink()
             shutil.rmtree(target)
 
+    @unittest.skipUnless(os.environ.get("EXORD_INIT_BIN"), "set EXORD_INIT_BIN")
+    def test_binary_upgrade_plan_is_schema_valid_and_read_only(self):
+        binary = os.environ["EXORD_INIT_BIN"]
+        intent = ROOT / "tests" / "fixtures" / "intent-create-quick-ko.json"
+        local_temp = ROOT / ".tools" / "test-fixtures"
+        local_temp.mkdir(parents=True, exist_ok=True)
+        suffix = uuid.uuid4().hex
+        target = local_temp / f"upgrade-{suffix}"
+        approval_path = local_temp / f"upgrade-approval-{suffix}.json"
+        target.mkdir()
+        (target / ".git").mkdir()
+
+        def run(*args, check=True):
+            return subprocess.run(
+                [binary, *args, "--json"],
+                check=check, capture_output=True, text=True, encoding="utf-8",
+            )
+
+        try:
+            plan_result = json.loads(
+                run("plan", "--intent", str(intent), "--target", str(target)).stdout
+            )
+            approval = dict(plan_result["data"]["approval_request"])
+            approval["approved_at"] = (
+                datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            )
+            approval_path.write_text(json.dumps(approval), encoding="utf-8")
+            applied = json.loads(
+                run("apply", "--target", str(target), "--run-id", plan_result["run_id"],
+                    "--approval", str(approval_path)).stdout
+            )
+            self.assertEqual(applied["status"], "OK")
+
+            before = sorted(
+                p.relative_to(target).as_posix()
+                for p in target.rglob("*")
+                if ".git" not in p.relative_to(target).parts
+            )
+            upgraded = json.loads(run("plan", "--upgrade", "--target", str(target)).stdout)
+            self.validate(upgraded, "result.schema.json")
+            self.validate(upgraded["data"]["plan"], "plan.schema.json")
+            self.assertFalse(upgraded["changed"])
+            self.assertIsNone(upgraded["run_id"])
+            spec = upgraded["data"]["plan"]["spec"]
+            self.assertEqual(spec["mode"], "UPGRADE")
+            self.assertEqual(spec["upgrade_analysis"]["disposition"], "UP_TO_DATE")
+            self.assertEqual(
+                spec["upgrade_analysis"]["generator"]["direction"], "SAME"
+            )
+            after = sorted(
+                p.relative_to(target).as_posix()
+                for p in target.rglob("*")
+                if ".git" not in p.relative_to(target).parts
+            )
+            self.assertEqual(before, after)
+
+            # An unknown manifest schema version fails closed.
+            manifest_path = target / ".exord" / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["schema_version"] = 2
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            refused = run("plan", "--upgrade", "--target", str(target), check=False)
+            self.assertEqual(refused.returncode, 7)
+            self.assertEqual(json.loads(refused.stdout)["code"], "VERSION_MISMATCH")
+        finally:
+            if approval_path.exists():
+                approval_path.unlink()
+            shutil.rmtree(target)
+
 
 if __name__ == "__main__":
     unittest.main()

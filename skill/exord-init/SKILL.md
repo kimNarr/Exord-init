@@ -26,12 +26,13 @@ The current v0.4 development capability is:
 
 - `CREATE + QUICK`: planning followed by plan-bound apply to an empty or allowlisted target. Apply runs the plan's declared validations before finalizing and rolls back on any failure.
 - `ADOPT + QUICK`: read-only inventory, existing-guidance conflicts, Task classification, and local Git analysis. Review its proposals, but do not apply them; ADOPT apply is not implemented.
+- `plan --upgrade`: read-only analysis of an existing `.exord/manifest.json` project. Reports a per-managed-file `upgrade_action` and an overall `disposition`; fails closed on an unknown manifest `schema_version`. Upgrade apply is not implemented.
 - `recover list`: read-only discovery of every retained run bundle for a target (`run_id`, status, stage, start time, safe next action). `plan` runs the same scan and returns `BLOCKED` if a retained run is recovery-required, interrupted mid-apply, or unreadable.
 - `recover inspect`: validate a retained CREATE run and classify every journaled output without changing the target.
 - `recover rollback`: after a separate plan-bound `RECOVER_ROLLBACK` approval, remove only hash-matched generated files. It does not remove empty directories or discard the retained run.
 - `recover discard`: after a separate `RECOVER_DISCARD` approval, permanently remove one settled run bundle (`FAILED`, `FINALIZED`, or never-applied). It refuses `RECOVERY_REQUIRED` and mid-apply runs; roll those back first.
 
-Reject `REINITIALIZE`, `CUSTOM`, ADOPT apply, upgrade apply, finalized-state cleanup, and every unimplemented Git action explicitly; do not simulate success. If `plan` returns `BLOCKED` for a retained run, inspect and resolve that run before retrying. If ADOPT reports secret candidates or a limited secret scan, stop commit proposals until the user resolves the risk.
+Reject `REINITIALIZE`, `CUSTOM`, ADOPT apply, upgrade apply, finalized-state cleanup, and every unimplemented Git action explicitly; do not simulate success. Treat `plan --upgrade` output as review material, not an instruction to change files. If `plan` returns `BLOCKED` for a retained run, inspect and resolve that run before retrying. If ADOPT reports secret candidates or a limited secret scan, stop commit proposals until the user resolves the risk.
 
 Read [engine-contract.md](references/engine-contract.md) before invoking the engine. Read [safety.md](references/safety.md) whenever the target is non-empty, Git state is unusual, or any destructive option is discussed.
 Read [recovery.md](references/recovery.md) only when a retained or interrupted run must be inspected or rolled back.

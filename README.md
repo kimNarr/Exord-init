@@ -41,7 +41,8 @@ AI-assisted projects often accumulate framework choices, duplicated instructions
 | Approval-bound `recover discard` for settled (rolled-back, finalized, never-applied) runs | Implemented |
 | Declared apply validations (`agents-size`, `manifest-schema`, `project-required-sections`) executed before finalization | Implemented |
 | Test-only fault injection (currently 2 stages: after publication, before validation) | Implemented |
-| Upgrade planning and additional fault stages | Planned for the remaining v0.4 work |
+| Read-only `plan --upgrade` analysis for an existing exord-init project | Implemented |
+| Upgrade apply and additional fault stages | Planned for the remaining v0.4 work |
 | `CUSTOM`, `REINITIALIZE`, and ADOPT apply | Not implemented |
 | Task and Git analysis | Implemented for ADOPT; generation remains planned |
 | Commit, branch, remote, and push automation | Not implemented |
@@ -96,7 +97,7 @@ go build -trimpath -o .\bin\exord-init.exe .\engine\cmd\exord-init
 .\bin\exord-init.exe doctor --json
 ```
 
-`doctor` should report protocol version `1` and the `plan:create-quick`, `apply:create-quick`, `plan:adopt-quick`, `recover:inspect`, `recover:rollback`, `recover:list`, and `recover:discard` capabilities.
+`doctor` should report protocol version `1` and the `plan:create-quick`, `apply:create-quick`, `plan:adopt-quick`, `plan:upgrade`, `recover:inspect`, `recover:rollback`, `recover:list`, and `recover:discard` capabilities.
 
 ## Quick start: `CREATE + QUICK`
 
@@ -234,6 +235,26 @@ Once a run is settled — rolled back (`FAILED`), applied (`FINALIZED`), or neve
 
 Finalized-state cleanup of the target itself is not implemented in this slice.
 
+## Read-only upgrade analysis: `plan --upgrade`
+
+For a directory that already has a valid `.exord/manifest.json`, `plan --upgrade` reports what a future upgrade would do, without touching the project or requesting an approval:
+
+```sh
+./bin/exord-init plan --upgrade --target ../my-project --json
+```
+
+It reads the manifest, fails closed if the manifest `schema_version` is not understood, compares each managed file's current bytes (CRLF-normalized) to its recorded baseline and its template version to the current generator's, and classifies every file:
+
+- `UP_TO_DATE` — baseline matches and the template is current;
+- `TEMPLATE_UPDATE_AVAILABLE` — an unmodified `REPLACE_IF_UNMODIFIED` file with a newer template;
+- `PROPOSE_ONLY_UPDATE` — a newer template for a `PROPOSE_ONLY` file, needs per-file approval;
+- `REVIEW_LOCAL_EDIT` — the file was changed locally;
+- `RECREATE_MISSING` — a managed file was deleted;
+- `NEW_MANAGED_FILE` / `ORPHAN_MANAGED_FILE` — the supported-agent set changed;
+- `BLOCKED` — a symlinked, type-conflicting, or unreadable managed file, an unknown `hash_mode`, or a generator downgrade.
+
+The overall `disposition` is `UP_TO_DATE`, `UPGRADE_AVAILABLE`, `REVIEW_REQUIRED`, or `BLOCKED`. Upgrade apply is not implemented in the current slice.
+
 ## Generated project files
 
 The current QUICK flow creates only the permanent minimum and requested bridges:
@@ -326,7 +347,7 @@ The planned risk-ordered implementation sequence is:
 1. v0.1: read-only `doctor` and `CREATE + QUICK` planning — implemented.
 2. v0.2: safe `CREATE + QUICK` plan-bound apply — implemented.
 3. v0.3: read-only `ADOPT` inventory, conflict analysis, Task and Git analysis — implemented.
-4. v0.4: recovery commands, upgrade behavior, and fault injection — recovery inspection, approved rollback, `recover list` discovery with pre-plan blocking, approval-bound `recover discard` for settled runs, declared apply-validation execution, and two apply fault points are implemented; finalized-state cleanup, upgrade, and the remaining fault matrix are pending.
+4. v0.4: recovery commands, upgrade behavior, and fault injection — recovery inspection, approved rollback, `recover list` discovery with pre-plan blocking, approval-bound `recover discard` for settled runs, read-only `plan --upgrade` analysis, declared apply-validation execution, and two apply fault points are implemented; upgrade apply, finalized-state cleanup, and the remaining fault matrix are pending.
 5. Later: `REINITIALIZE` with verified external backup and separately approved destructive options.
 
 This roadmap describes implementation order, not a release commitment.

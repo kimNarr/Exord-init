@@ -5,6 +5,7 @@
 - `CREATE`: only for an empty target or the documented harmless-entry allowlist.
 - `ADOPT`: preserve an existing project and propose non-destructive additions. In the current prototype, stop after read-only inventory, Git/Task analysis, and conflict classification; ADOPT apply is not implemented.
 - `REINITIALIZE`: advanced flow; external verified backup is mandatory.
+- `plan --upgrade`: for a directory that already has `.exord/manifest.json`, a read-only report of what a later upgrade would change. Not a purpose to select in discovery; run it when the user asks to check for template or generator updates.
 
 Never change the selected purpose because inspection found unexpected files. Stop and ask the user to choose.
 

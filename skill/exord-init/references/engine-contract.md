@@ -7,6 +7,7 @@ The Skill submits choices through `intent.schema.json`. The engine owns target i
 ```text
 exord-init doctor --json
 exord-init plan --intent <intent.json> --target <directory> --protocol-version 1 --json
+exord-init plan --upgrade --target <directory> --protocol-version 1 --json
 exord-init apply --target <directory> --run-id <uuid> --approval <approval.json> --protocol-version 1 --json
 exord-init recover list --target <directory> --protocol-version 1 --json
 exord-init recover inspect --target <directory> --run-id <uuid> --protocol-version 1 --json
@@ -15,6 +16,8 @@ exord-init recover discard --target <directory> --run-id <uuid> --approval <appr
 ```
 
 For `CREATE + QUICK`, `plan` does not create project files but stores a local run bundle containing the exact plan and staged bytes. `apply` accepts only a human-approved Approval document bound to the returned `run_id`, `plan_id`, `spec_sha256`, and `target_identity_sha256`. It re-inspects the target, verifies every staged hash, creates files without overwriting, writes the manifest last, re-hashes each generated file, runs the plan's declared validations (`agents-size-v1`, `manifest-schema-v1`, `project-required-sections-v1`; an unknown ID or a failed check rolls back the run), and removes successful run state. Failed or recovery-required run state is retained.
+
+For `plan --upgrade`, the engine reads an existing `.exord/manifest.json` and every managed file without changing the target. It fails closed (`UNSUPPORTED_TARGET` for a missing or foreign manifest, `VERSION_MISMATCH` for an unknown `schema_version`), then returns a `mode: UPGRADE` plan whose `spec.upgrade_analysis` classifies each managed file (`UP_TO_DATE`, `TEMPLATE_UPDATE_AVAILABLE`, `PROPOSE_ONLY_UPDATE`, `REVIEW_LOCAL_EDIT`, `RECREATE_MISSING`, `NEW_MANAGED_FILE`, `ADOPT_EXISTING_FILE`, `ORPHAN_MANAGED_FILE`, `BLOCKED`) and gives an overall `disposition`. It never stages files or returns an approval request. Upgrade apply is not implemented.
 
 For `ADOPT + QUICK`, `plan` is read-only with respect to the target. It returns bounded inventory counts, Git root/branch/status facts, Task classification, known guidance ownership, non-overwriting CREATE candidates, and conflicts with explicit resolution options. It does not return an approval request or persist an applicable run. Secret candidates are counts only; never request or print their values. ADOPT apply remains unsupported. ADOPT `adopt-*` validation entries describe invariants the read-only analysis already establishes; they are not executed checks. ADOPT does not write the target, but for a target with no manifest `project_id` it initializes a `project.json` in the OS user-state directory (outside the target) so the analysis project ID is stable across re-planning.
 

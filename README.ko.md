@@ -41,7 +41,8 @@ AI를 활용해 프로젝트를 시작하면 제품 경계를 이해하기 전�
 | 정착된(rolled-back·finalized·미적용) run에 대한 승인 결합 `recover discard` | 구현됨 |
 | 완료 전 실행되는 선언된 apply 검증(`agents-size`, `manifest-schema`, `project-required-sections`) | 구현됨 |
 | 테스트 전용 fault injection(현재 2단계: 파일 publication 이후, 검증 직전) | 구현됨 |
-| Upgrade 계획 및 추가 fault 단계 | 남은 v0.4 작업으로 계획됨 |
+| 기존 exord-init 프로젝트에 대한 읽기 전용 `plan --upgrade` 분석 | 구현됨 |
+| Upgrade apply 및 추가 fault 단계 | 남은 v0.4 작업으로 계획됨 |
 | `CUSTOM`, `REINITIALIZE`, ADOPT apply | 미구현 |
 | Task 및 Git 분석 | ADOPT에서 구현됨, 생성 기능은 계획 단계 |
 | commit, branch, remote와 push 자동화 | 미구현 |
@@ -96,7 +97,7 @@ go build -trimpath -o .\bin\exord-init.exe .\engine\cmd\exord-init
 .\bin\exord-init.exe doctor --json
 ```
 
-`doctor` 결과에서 protocol version `1`, `plan:create-quick`, `apply:create-quick`, `plan:adopt-quick`, `recover:inspect`, `recover:rollback`, `recover:list`, `recover:discard` capability를 확인할 수 있어야 합니다.
+`doctor` 결과에서 protocol version `1`, `plan:create-quick`, `apply:create-quick`, `plan:adopt-quick`, `plan:upgrade`, `recover:inspect`, `recover:rollback`, `recover:list`, `recover:discard` capability를 확인할 수 있어야 합니다.
 
 ## 빠른 시작: `CREATE + QUICK`
 
@@ -234,6 +235,16 @@ run이 정착되면 — rollback 완료(`FAILED`), apply 완료(`FINALIZED`), �
 
 대상 자체의 finalized 상태 cleanup은 이번 슬라이스에서 구현하지 않습니다.
 
+## 읽기 전용 upgrade 분석: `plan --upgrade`
+
+유효한 `.exord/manifest.json`이 있는 디렉터리에 대해 `plan --upgrade`는 프로젝트를 건드리거나 승인을 요구하지 않고 향후 upgrade가 무엇을 할지 보고합니다.
+
+```sh
+./bin/exord-init plan --upgrade --target ../my-project --json
+```
+
+manifest를 읽고, `schema_version`을 이해하지 못하면 fail-closed하며, 관리 파일별로 현재 바이트(CRLF 정규화)를 기록된 baseline과, 템플릿 버전을 현재 generator와 비교해 `UP_TO_DATE`, `TEMPLATE_UPDATE_AVAILABLE`, `PROPOSE_ONLY_UPDATE`, `REVIEW_LOCAL_EDIT`, `RECREATE_MISSING`, `NEW_MANAGED_FILE`, `ORPHAN_MANAGED_FILE`, `BLOCKED`로 분류합니다. 전체 `disposition`은 `UP_TO_DATE` / `UPGRADE_AVAILABLE` / `REVIEW_REQUIRED` / `BLOCKED`입니다. upgrade apply는 이번 슬라이스에서 구현하지 않습니다.
+
 ## 생성되는 프로젝트 파일
 
 현재 QUICK 흐름은 영구 최소 파일과 요청한 연결 문서만 생성합니다.
@@ -326,7 +337,7 @@ EXORD_INIT_BIN=./bin/exord-init python -m unittest discover -s tests -p '*_test.
 1. v0.1: 읽기 전용 `doctor`와 `CREATE + QUICK` 계획 — 구현됨
 2. v0.2: 안전한 `CREATE + QUICK` plan-bound apply — 구현됨
 3. v0.3: 읽기 전용 `ADOPT` inventory, 충돌 분석, Task 및 Git 분석 — 구현됨
-4. v0.4: 복구 명령, upgrade 동작과 fault injection — 복구 검사, 승인형 rollback, `recover list` 발견과 plan 사전 차단, 정착 run에 대한 승인형 `recover discard`, 선언된 apply 검증 실행과 두 apply fault 지점은 구현됐으며 finalized 상태 cleanup, upgrade와 나머지 fault matrix는 남아 있음
+4. v0.4: 복구 명령, upgrade 동작과 fault injection — 복구 검사, 승인형 rollback, `recover list` 발견과 plan 사전 차단, 정착 run에 대한 승인형 `recover discard`, 읽기 전용 `plan --upgrade` 분석, 선언된 apply 검증 실행과 두 apply fault 지점은 구현됐으며 upgrade apply, finalized 상태 cleanup과 나머지 fault matrix는 남아 있음
 5. 이후: 검증된 외부 백업과 별도 파괴적 승인을 요구하는 `REINITIALIZE`
 
 이 로드맵은 구현 순서를 나타내며 릴리스 일정을 약속하지 않습니다.

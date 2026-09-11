@@ -104,16 +104,49 @@ type AdoptAnalysis struct {
 	Conflicts []Conflict         `json:"conflicts"`
 }
 
+type UpgradeGenerator struct {
+	Recorded  string `json:"recorded"`
+	Current   string `json:"current"`
+	Direction string `json:"direction"`
+}
+
+type UpgradeSettings struct {
+	GitMode               string   `json:"git_mode"`
+	BranchProfile         string   `json:"branch_profile"`
+	DocumentationLanguage string   `json:"documentation_language"`
+	SupportedAgents       []string `json:"supported_agents"`
+}
+
+type UpgradeFileAnalysis struct {
+	Path                    string `json:"path"`
+	TemplateID              string `json:"template_id"`
+	UpdatePolicy            string `json:"update_policy"`
+	RecordedTemplateVersion int    `json:"recorded_template_version"`
+	CurrentTemplateVersion  int    `json:"current_template_version"`
+	LocalState              string `json:"local_state"`
+	UpgradeAction           string `json:"upgrade_action"`
+}
+
+type UpgradeAnalysis struct {
+	ManifestSchemaVersion int                   `json:"manifest_schema_version"`
+	Generator             UpgradeGenerator      `json:"generator"`
+	Settings              UpgradeSettings       `json:"settings"`
+	GitConsistent         bool                  `json:"git_consistent"`
+	Files                 []UpgradeFileAnalysis `json:"files"`
+	Disposition           string                `json:"disposition"`
+}
+
 type PlanSpec struct {
-	Mode                 string         `json:"mode"`
-	Depth                string         `json:"depth"`
-	ProjectID            string         `json:"project_id"`
-	TargetIdentitySHA256 string         `json:"target_identity_sha256"`
-	TargetFingerprint    string         `json:"target_fingerprint"`
-	Operations           []Operation    `json:"operations"`
-	Validation           []Validation   `json:"validation"`
-	RiskSummary          RiskSummary    `json:"risk_summary"`
-	AdoptAnalysis        *AdoptAnalysis `json:"adopt_analysis,omitempty"`
+	Mode                 string           `json:"mode"`
+	Depth                string           `json:"depth"`
+	ProjectID            string           `json:"project_id"`
+	TargetIdentitySHA256 string           `json:"target_identity_sha256"`
+	TargetFingerprint    string           `json:"target_fingerprint"`
+	Operations           []Operation      `json:"operations"`
+	Validation           []Validation     `json:"validation"`
+	RiskSummary          RiskSummary      `json:"risk_summary"`
+	AdoptAnalysis        *AdoptAnalysis   `json:"adopt_analysis,omitempty"`
+	UpgradeAnalysis      *UpgradeAnalysis `json:"upgrade_analysis,omitempty"`
 }
 
 type SetupPlan struct {
