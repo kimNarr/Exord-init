@@ -11,6 +11,7 @@ import (
 	exordinit "github.com/kimNarr/Exord-init"
 	applyengine "github.com/kimNarr/Exord-init/engine/internal/apply"
 	approvalcontract "github.com/kimNarr/Exord-init/engine/internal/approval"
+	"github.com/kimNarr/Exord-init/engine/internal/buildinfo"
 	"github.com/kimNarr/Exord-init/engine/internal/id"
 	"github.com/kimNarr/Exord-init/engine/internal/planner"
 	"github.com/kimNarr/Exord-init/engine/internal/protocol"
@@ -19,7 +20,7 @@ import (
 	"github.com/kimNarr/Exord-init/engine/internal/target"
 )
 
-var version = "0.4.0-dev"
+var version = buildinfo.Version
 
 const protocolVersion = 1
 
@@ -32,6 +33,7 @@ var engineCapabilities = []string{
 	"apply:create-quick",
 	"plan:adopt-quick",
 	"plan:upgrade",
+	"task:plan",
 	"recover:inspect",
 	"recover:rollback",
 	"recover:list",
@@ -51,6 +53,8 @@ func main() {
 		runApply(os.Args[2:])
 	case "recover":
 		runRecover(os.Args[2:])
+	case "task":
+		runTask(os.Args[2:])
 	default:
 		emit(failure(os.Args[1], "INVALID_INTENT", "error.unknown_command", nil), 2)
 	}

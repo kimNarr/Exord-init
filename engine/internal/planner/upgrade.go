@@ -8,13 +8,14 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/kimNarr/Exord-init/engine/internal/buildinfo"
 	"github.com/kimNarr/Exord-init/engine/internal/canonicaljson"
 	"github.com/kimNarr/Exord-init/engine/internal/id"
 	"github.com/kimNarr/Exord-init/engine/internal/protocol"
 	"github.com/kimNarr/Exord-init/engine/internal/target"
 )
 
-const currentGeneratorVersion = "0.4.0-dev"
+const currentGeneratorVersion = buildinfo.Version
 
 // currentTemplateVersions is the generator's view of every managed template's
 // version. An upgrade plan compares these to the versions recorded in the

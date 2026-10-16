@@ -22,11 +22,12 @@ Establish a project foundation from product and architecture needs. Stop before 
 
 Run `exord-init doctor --json` before proposing an apply action. If the matching engine is unavailable or incompatible, continue discovery only and explain the verified installation requirement. Never perform the engine's filesystem duties with ad-hoc shell commands.
 
-The current v0.4 development capability is:
+The current v0.5.0-dev development capability is:
 
 - `CREATE + QUICK`: planning followed by plan-bound apply to an empty or allowlisted target. Apply runs the plan's declared validations before finalizing and rolls back on any failure.
 - `ADOPT + QUICK`: read-only inventory, existing-guidance conflicts, Task classification, and local Git analysis. Review its proposals, but do not apply them; ADOPT apply is not implemented.
 - `plan --upgrade`: read-only analysis of an existing `.exord/manifest.json` project. Reports a per-managed-file `upgrade_action` and an overall `disposition`; fails closed on an unknown manifest `schema_version`. Upgrade apply is not implemented.
+- `task plan` (`task:plan`): read-only TaskIntent and work-branch review. Read [task-workflow.md](references/task-workflow.md) when preparing the first task. No task ID, files, run state or approval request are generated; task apply is unsupported.
 - `recover list`: read-only discovery of every retained run bundle for a target (`run_id`, status, stage, start time, safe next action). `plan` runs the same scan and returns `BLOCKED` if a retained run is recovery-required, interrupted mid-apply, or unreadable.
 - `recover inspect`: validate a retained CREATE run and classify every journaled output without changing the target.
 - `recover rollback`: after a separate plan-bound `RECOVER_ROLLBACK` approval, remove only hash-matched generated files. It does not remove empty directories or discard the retained run.

@@ -32,7 +32,7 @@ func baseInspection() target.UpgradeInspection {
 
 func withSettings(inspection target.UpgradeInspection) target.UpgradeInspection {
 	inspection.Manifest.Generator.Name = "exord-init"
-	inspection.Manifest.Generator.Version = "0.4.0-dev"
+	inspection.Manifest.Generator.Version = currentGeneratorVersion
 	inspection.Manifest.Settings.GitMode = "ENABLED"
 	inspection.Manifest.Settings.BranchProfile = "SIMPLE"
 	inspection.Manifest.Settings.Languages.Documentation = "en"

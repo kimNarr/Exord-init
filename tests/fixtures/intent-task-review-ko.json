@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "title": "첫 구현 작업 범위 검토",
+  "type": "spike",
+  "areas": ["project-setup"],
+  "scope_paths": ["docs/"],
+  "external_ref": null,
+  "status": "DRAFT",
+  "owner": "UNASSIGNED",
+  "owner_confirmed": false,
+  "contributors": [],
+  "base_branch": "main",
+  "work_branch": "feat/first-task",
+  "language": "ko",
+  "goal": "첫 구현의 관찰 가능한 완료 조건을 정한다",
+  "scope": ["제품 경계 검토"],
+  "non_goals": ["제품 기능 구현"],
+  "acceptance_criteria": [],
+  "plan": [],
+  "validation": []
+}

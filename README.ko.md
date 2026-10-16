@@ -8,7 +8,7 @@
 
 이 프로젝트 자체도 바이브코딩 방식으로 개발하고 있습니다. 사용자가 제품 방향과 안전 관련 결정을 주도하고 AI 코딩 에이전트가 조사, 설계, 구현, 리뷰와 테스트를 지원합니다. 여기서 바이브코딩은 검증을 생략한다는 뜻이 아닙니다. 명시적인 계약, plan-bound 승인, 자동화 테스트와 사용자 리뷰를 통해 AI가 생성한 변경을 추적하고 검증합니다.
 
-> 개발 상태: **v0.4 개발 프로토타입**. 아직 안정 릴리스나 공식 설치 프로그램은 없습니다. 현재 엔진은 안전한 `CREATE + QUICK` 적용, 읽기 전용 `ADOPT + QUICK` 분석과 1차 복구 슬라이스를 지원합니다.
+> 개발 상태: **v0.5.0-dev 개발 프로토타입**. 아직 안정 릴리스나 공식 설치 프로그램은 없습니다. 현재 엔진은 안전한 `CREATE + QUICK` 적용, 읽기 전용 `ADOPT + QUICK`·upgrade 분석, 복구와 읽기 전용 `task plan`을 지원합니다. [변경 이력](CHANGELOG.md)과 [버전 관리 기준](docs/spec/versioning.md)을 참고하세요.
 
 ## 만드는 이유
 
@@ -42,9 +42,10 @@ AI를 활용해 프로젝트를 시작하면 제품 경계를 이해하기 전�
 | 완료 전 실행되는 선언된 apply 검증(`agents-size`, `manifest-schema`, `project-required-sections`) | 구현됨 |
 | 테스트 전용 crash matrix(apply 모든 단계와 rollback 도중, recovery까지 검증) | 구현됨 |
 | 기존 exord-init 프로젝트에 대한 읽기 전용 `plan --upgrade` 분석 | 구현됨 |
-| Upgrade apply 및 추가 fault 단계 | 남은 v0.4 작업으로 계획됨 |
+| Upgrade apply 및 finalized 상태 cleanup | 후속 작업으로 계획됨 |
 | `CUSTOM`, `REINITIALIZE`, ADOPT apply | 미구현 |
 | Task 및 Git 분석 | ADOPT에서 구현됨, 생성 기능은 계획 단계 |
+| `task:plan` / `task plan` | TaskIntent·준비도·작업 브랜치 읽기 전용 검토. Task 생성·apply는 미지원 |
 | commit, branch, remote와 push 자동화 | 미구현 |
 | 제품별 plugin 및 extension package | 미배포 |
 
@@ -235,6 +236,33 @@ run이 정착되면 — rollback 완료(`FAILED`), apply 완료(`FINALIZED`), �
 
 대상 자체의 finalized 상태 cleanup은 이번 슬라이스에서 구현하지 않습니다.
 
+## 읽기 전용 Task 준비: `task plan`
+
+프로젝트 기반과 로컬 작업 브랜치를 준비한 뒤
+[`intent-task-review-ko.json`](tests/fixtures/intent-task-review-ko.json)을 복사해
+작업 내용, 작업·기준 브랜치와 언어(`en` 또는 `ko`)를 수정합니다.
+
+```sh
+./bin/exord-init task plan --intent ./task-intent.json --target ../my-project --json
+```
+
+Git 사용과 지원하는 Task 경로가 설정된 exord-init manifest가 필요합니다.
+현재 작업 브랜치, 로컬 기준 브랜치, 기존 Task, 사람 담당자 확인, 범위,
+완료 조건과 검증 방법을 검토하며, 입력한 검증 명령은 실행하지 않습니다.
+선택 설정 `settings.integration_branches`는 기본 보호 이름인 main/dev/master에
+프로젝트의 통합 브랜치를 추가합니다.
+
+별도 계약인 `data.task_plan`에 `DRAFT`, `READY_FOR_REVIEW`, `BLOCKED`와
+누락·차단 사유를 반환합니다. 검사에 성공하면 BLOCKED도 exit code 0이므로
+반드시 disposition을 확인해야 합니다. READY_FOR_REVIEW는 입력·브랜치 준비도이며
+승인이나 제품·아키텍처 준비 완료를 뜻하지 않습니다. 담당자 확인 boolean은
+사람의 응답을 기록하는 값이며 신원을 검증하지 않습니다. 검증 결과는 항상 `NOT_RUN`입니다.
+
+Task ID, 파일, staging, 승인 요청과 로컬 실행 상태를 생성하지 않습니다.
+`task apply`, linked worktree 지원과 Task 갱신은 후속 범위입니다.
+같은 입력·검사 상태를 다시 검토하면 spec hash는 같고 plan ID는 달라집니다.
+이 검토 해시를 CREATE apply나 복구 승인으로 사용할 수 없습니다.
+
 ## 읽기 전용 upgrade 분석: `plan --upgrade`
 
 유효한 `.exord/manifest.json`이 있는 디렉터리에 대해 `plan --upgrade`는 프로젝트를 건드리거나 승인을 요구하지 않고 향후 upgrade가 무엇을 할지 보고합니다.
@@ -257,7 +285,7 @@ CLAUDE.md              요청한 경우 생성하는 얇은 Claude Code 연결 �
 GEMINI.md              요청한 경우 생성하는 얇은 Gemini CLI 연결 문서
 ```
 
-`CLAUDE.md`와 `GEMINI.md`는 전체 프로젝트 규칙을 복제하지 않고 기준 문서인 `AGENTS.md`를 참조합니다. 아키텍처 계층 문서와 `TASK.md`는 조건부 후속 결과물이며 현재 v0.4 QUICK 흐름에서는 생성하지 않습니다.
+`CLAUDE.md`와 `GEMINI.md`는 전체 프로젝트 규칙을 복제하지 않고 기준 문서인 `AGENTS.md`를 참조합니다. 아키텍처 계층 문서와 `TASK.md`는 조건부 후속 결과물이며 현재 QUICK 흐름에서는 생성하지 않습니다.
 
 ## 현재 프로토타입의 안전 보장
 

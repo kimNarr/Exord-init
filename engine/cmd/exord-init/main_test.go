@@ -37,6 +37,24 @@ func TestHardLinkFailureProvidesRedactedRecoveryGuidance(t *testing.T) {
 
 type secretError string
 
+func TestCLITaskRejectsUnsupportedActionsAndInvalidFlags(t *testing.T) {
+	for _, tc := range []struct {
+		args   []string
+		code   int
+		reason string
+	}{
+		{[]string{"task", "apply"}, 7, "UNSUPPORTED_CAPABILITY"},
+		{[]string{"task", "plan"}, 2, "INVALID_INTENT"},
+		{[]string{"task", "plan", "--intent", "missing.json", "--target", ".", "--protocol-version", "999"}, 7, "VERSION_MISMATCH"},
+		{[]string{"task", "plan", "--intent", "missing.json", "--target", ".", "extra"}, 2, "INVALID_INTENT"},
+	} {
+		res, code, raw := runCLI(t, tc.args...)
+		if code != tc.code || res.Code != tc.reason || res.Command != "task" || res.Changed {
+			t.Fatalf("unexpected task failure: %s (exit %d)", raw, code)
+		}
+	}
+}
+
 func (e secretError) Error() string { return string(e) }
 
 // TestHelperProcess is used to run main() in a subprocess for end-to-end CLI testing.

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://exord-init.dev/schema/task-plan-v1.json",
+  "title": "Read-only Task review v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "plan_id", "spec", "spec_sha256"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "plan_id": {"type": "string", "format": "uuid"},
+    "spec_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "spec": {
+      "type": "object", "additionalProperties": false,
+      "required": ["mode", "project_id", "target_identity_sha256", "target_fingerprint", "task_path", "intent", "git", "disposition", "blockers", "readiness_gaps", "validation_result"],
+      "properties": {
+        "mode": {"const": "TASK_REVIEW"},
+        "project_id": {"type": "string", "format": "uuid"},
+        "target_identity_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "target_fingerprint": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "task_path": {"enum": ["TASK.md", ".exord/TASK.md"]},
+        "intent": {"$ref": "task-intent-v1.json"},
+        "git": {"$ref": "plan-v1.json#/$defs/gitAnalysis"},
+        "disposition": {"enum": ["DRAFT", "READY_FOR_REVIEW", "BLOCKED"]},
+        "blockers": {"type": "array", "uniqueItems": true, "items": {"enum": ["ORDINARY_GIT_REPOSITORY_REQUIRED", "BORN_BRANCH_REQUIRED", "ATTACHED_BRANCH_REQUIRED", "GIT_OPERATION_IN_PROGRESS", "WORK_BRANCH_MISMATCH", "INTEGRATION_BRANCH", "EXISTING_TASK_CONFLICT", "LOCAL_BASE_BRANCH_REQUIRED"]}},
+        "readiness_gaps": {"type": "array", "uniqueItems": true, "items": {"enum": ["HUMAN_OWNER_CONFIRMATION_REQUIRED", "GOAL_REQUIRED", "SCOPE_REQUIRED", "ACCEPTANCE_CRITERIA_REQUIRED", "VERIFICATION_METHOD_REQUIRED"]}},
+        "validation_result": {"const": "NOT_RUN"}
+      }
+    }
+  }
+}

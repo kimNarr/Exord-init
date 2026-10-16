@@ -2,6 +2,48 @@
 
 This document is the public implementation-facing protocol contract. Historical planning checkpoints and review inputs are maintained outside the repository.
 
+## Read-only Task review
+
+`task plan --intent <TaskIntent.json> --target <project> --json` is capability
+`task:plan`. It returns Result command `task` with `data.task_plan` validated by
+`schemas/task-plan.schema.json`; the input uses `schemas/task-intent.schema.json`.
+This is deliberately separate from an applicable SetupPlan. Review creates no
+Task ID, timestamp, files, staged bytes, run, approval request or local state.
+IDs and exact rendered bytes belong to the later task creation slice.
+
+Schemas validate wire shapes; the engine additionally enforces bounded UTF-8,
+exact JSON keys, duplicate rejection, relative scope paths, branch syntax and
+semantic readiness. Text fields and list items are single-line strings; lists
+carry multiple criteria or steps. An empty goal is allowed only as a draft gap.
+
+The engine hashes the canonical TaskReviewSpec, including the validated intent,
+target fingerprint, inspected Git facts and readiness findings. Plan IDs are
+unique per review; identical inputs and inspected facts have the same spec hash.
+No command executes the input's validation strings. `validation_result` is
+`NOT_RUN`, and `owner_confirmed` records a user assertion, not identity proof.
+
+Disposition is `DRAFT`, `READY_FOR_REVIEW`, or `BLOCKED`. Requested READY with
+readiness gaps, or unsafe Git/existing Task conditions, produces BLOCKED.
+A syntactically valid review returns exit 0 even when BLOCKED; consumers inspect
+Result status and disposition. Invalid intent is exit 2, unsupported target 4,
+unknown manifest/protocol version 7. Unsupported task actions (including apply)
+are `UNSUPPORTED_CAPABILITY`, exit 7. This additive protocol extension remains
+version 1 and is discovered through capabilities.
+
+Only ordinary Git-enabled exord projects and configured `TASK.md` or
+`.exord/TASK.md` paths are reviewed. The requested base must exist locally;
+main/dev/master, the requested base, and optional manifest
+`settings.integration_branches` are protected. Git-file worktrees, unborn or
+detached branches, in-progress operations, mismatched work branches and any
+existing Task path produce blockers. No branch mutation or network request runs.
+Inventory is bounded and not a transactionally atomic snapshot; task apply must
+introduce locking and complete reinspection instead of accepting this review.
+
+ADOPT Task classification uses bounded structural YAML metadata (version 1,
+stable ID/status/type, required fields) in either body language. Malformed,
+duplicate-key, alias-bearing or unknown metadata stays USER_OWNED. Recognition
+never permits replacement or claims that the engine generated the file.
+
 ## Boundary
 
 Adapters create a schema-valid SetupIntent. They cannot supply operations, risk counts, or a trusted hash. The engine inspects the target and exclusively creates the Setup Plan, canonical `spec_sha256`, and Result. An ADOPT plan may include `adopt_analysis` with bounded inventory, Git, Task, known-guidance, and conflict facts; an `UPGRADE` plan (`plan --upgrade`, no intent) includes `upgrade_analysis` with the manifest settings and a per-managed-file assessment. Both stay inside the hashed plan spec.

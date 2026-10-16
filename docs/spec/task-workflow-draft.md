@@ -4,6 +4,14 @@ Status: DRAFT. This document proposes the next implementation slice; it does
 not advertise a supported CLI capability. Existing CREATE, ADOPT, upgrade,
 approval, and recovery contracts continue to describe shipped behavior.
 
+Implementation checkpoint (2026-10-16): `task plan` now performs only the
+read-only intent/branch/readiness review documented in `protocol.md`. Its
+separate TaskReviewPlan does not allocate IDs or timestamps, render a document,
+persist local state, stage files or request approval. ID allocation and
+collision checks below are future task-creation requirements. `task apply`
+remains a proposal and is explicitly unsupported. The implemented subset in
+`protocol.md` takes precedence over the proposal below.
+
 ## Purpose
 
 Prepare one actionable task for a human or team on a work branch, without

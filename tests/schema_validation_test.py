@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 
 try:
     import jsonschema
+    from referencing import Registry, Resource
 except ImportError:
     jsonschema = None
 
@@ -28,8 +29,15 @@ class SchemaValidationTests(unittest.TestCase):
     def validate(self, instance, schema_name):
         schema = self.schema(schema_name)
         jsonschema.Draft202012Validator.check_schema(schema)
+        registry = Registry().with_resources(
+            (document["$id"], Resource.from_contents(document))
+            for document in (
+                json.loads(p.read_text(encoding="utf-8"))
+                for p in (ROOT / "schemas").glob("*.schema.json")
+            )
+        )
         jsonschema.Draft202012Validator(
-            schema, format_checker=jsonschema.FormatChecker()
+            schema, format_checker=jsonschema.FormatChecker(), registry=registry
         ).validate(instance)
 
     def test_intent_fixture_matches_schema(self):
@@ -108,6 +116,12 @@ class SchemaValidationTests(unittest.TestCase):
             self.assertTrue(apply_result["changed"])
             self.assertTrue((target / "AGENTS.md").is_file())
             self.assertTrue((target / ".exord" / "manifest.json").is_file())
+            manifest = json.loads((target / ".exord" / "manifest.json").read_text(encoding="utf-8"))
+            doctor = json.loads(subprocess.run(
+                [binary, "doctor", "--json"], check=True, capture_output=True,
+                text=True, encoding="utf-8",
+            ).stdout)
+            self.assertEqual(manifest["generator"]["version"], doctor["data"]["version"])
         finally:
             if approval_path.exists():
                 approval_path.unlink()
@@ -488,6 +502,95 @@ class SchemaValidationTests(unittest.TestCase):
             if approval_path.exists():
                 approval_path.unlink()
             shutil.rmtree(target)
+
+
+    @unittest.skipUnless(os.environ.get("EXORD_INIT_BIN"), "set EXORD_INIT_BIN")
+    def test_binary_task_review_is_schema_valid_and_read_only(self):
+        import hashlib
+        import tempfile
+
+        binary = os.environ["EXORD_INIT_BIN"]
+        local_temp = ROOT / ".tools" / "test-fixtures"
+        local_temp.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=local_temp) as fixture:
+            fixture = pathlib.Path(fixture)
+            target = fixture / "project"
+            target.mkdir()
+
+            def git(*args):
+                return subprocess.run(
+                    ["git", "-C", str(target), *args], check=True,
+                    capture_output=True, text=True, encoding="utf-8",
+                )
+
+            def run(*args, expected=0):
+                completed = subprocess.run(
+                    [binary, *args, "--json"], check=False,
+                    capture_output=True, text=True, encoding="utf-8",
+                )
+                self.assertEqual(completed.returncode, expected, completed.stdout + completed.stderr)
+                result = json.loads(completed.stdout)
+                self.validate(result, "result.schema.json")
+                return result
+
+            def snapshot():
+                return {
+                    str(p.relative_to(target)): (
+                        hashlib.sha256(p.read_bytes()).hexdigest() if p.is_file() else "directory"
+                    )
+                    for p in target.rglob("*")
+                }
+
+            git("init", "-b", "main")
+            created = run("plan", "--target", str(target), "--intent",
+                          str(ROOT / "tests/fixtures/intent-create-quick-ko.json"))
+            approval = dict(created["data"]["approval_request"])
+            approval["approved_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            approval_path = fixture / "approval.json"
+            approval_path.write_text(json.dumps(approval), encoding="utf-8")
+            run("apply", "--target", str(target), "--run-id", created["run_id"],
+                "--approval", str(approval_path))
+            git("add", ".")
+            git("-c", "user.name=Example", "-c", "user.email=example@example.invalid",
+                "-c", f"core.hooksPath={fixture / 'no-hooks'}", "-c", "commit.gpgsign=false",
+                "commit", "-m", "synthetic fixture")
+            git("checkout", "-b", "feat/first-task")
+            intent = json.loads((ROOT / "tests/fixtures/intent-task-review-ko.json").read_text(encoding="utf-8"))
+            self.validate(intent, "task-intent.schema.json")
+            intent_path = fixture / "task-intent.json"
+
+            def review():
+                intent_path.write_text(json.dumps(intent), encoding="utf-8")
+                before = snapshot()
+                result = run("task", "plan", "--target", str(target), "--intent", str(intent_path))
+                self.assertEqual(snapshot(), before)
+                self.assertFalse(result["changed"])
+                self.assertIsNone(result["run_id"])
+                self.assertNotIn("approval_request", result["data"])
+                plan = result["data"]["task_plan"]
+                self.validate(plan, "task-plan.schema.json")
+                self.assertNotIn("task_id", plan["spec"])
+                self.assertEqual(plan["spec"]["validation_result"], "NOT_RUN")
+                return plan
+
+            draft = review()
+            self.assertEqual(draft["spec"]["disposition"], "DRAFT")
+            repeated = review()
+            self.assertEqual(draft["spec_sha256"], repeated["spec_sha256"])
+            self.assertNotEqual(draft["plan_id"], repeated["plan_id"])
+            intent["status"] = "READY"
+            self.assertEqual(review()["spec"]["disposition"], "BLOCKED")
+            intent.update(owner="@example", owner_confirmed=True,
+                          acceptance_criteria=["reviewed outcome"], validation=["observe the outcome"])
+            self.assertEqual(review()["spec"]["disposition"], "READY_FOR_REVIEW")
+            (target / "notes.txt").write_text("user changes", encoding="utf-8")
+            self.assertEqual(review()["spec"]["disposition"], "READY_FOR_REVIEW")
+            (target / "TASK.md").write_text("user-owned task", encoding="utf-8")
+            self.assertIn("EXISTING_TASK_CONFLICT", review()["spec"]["blockers"])
+            run("task", "apply", "--target", str(target), expected=7)
+            git("checkout", "main")
+            intent.update(work_branch="main", base_branch="feat/first-task")
+            self.assertIn("INTEGRATION_BRANCH", review()["spec"]["blockers"])
 
 
 if __name__ == "__main__":

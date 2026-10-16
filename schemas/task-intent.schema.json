@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://exord-init.dev/schema/task-intent-v1.json",
+  "title": "Read-only TaskIntent v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "title", "type", "areas", "scope_paths", "external_ref", "status", "owner", "owner_confirmed", "contributors", "base_branch", "work_branch", "language", "goal", "scope", "non_goals", "acceptance_criteria", "plan", "validation"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "title": {"type": "string", "minLength": 1, "maxLength": 200},
+    "type": {"enum": ["feature", "fix", "chore", "docs", "spike"]},
+    "areas": {"type": "array", "maxItems": 32, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 100}},
+    "scope_paths": {"type": "array", "maxItems": 64, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 512}},
+    "external_ref": {"type": ["string", "null"], "minLength": 1, "maxLength": 512},
+    "status": {"enum": ["DRAFT", "READY"]},
+    "owner": {"type": "string", "minLength": 1, "maxLength": 100},
+    "owner_confirmed": {"type": "boolean"},
+    "contributors": {"type": "array", "maxItems": 32, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 100}},
+    "base_branch": {"type": "string", "minLength": 1, "maxLength": 200},
+    "work_branch": {"type": "string", "minLength": 1, "maxLength": 200},
+    "language": {"enum": ["en", "ko"]},
+    "goal": {"type": "string", "maxLength": 2000},
+    "scope": {"$ref": "#/$defs/textList"},
+    "non_goals": {"$ref": "#/$defs/textList"},
+    "acceptance_criteria": {"$ref": "#/$defs/textList"},
+    "plan": {"$ref": "#/$defs/textList"},
+    "validation": {"$ref": "#/$defs/textList"}
+  },
+  "$defs": {
+    "textList": {"type": "array", "maxItems": 64, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 2000}}
+  }
+}

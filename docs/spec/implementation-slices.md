@@ -1,5 +1,8 @@
 # Implementation slices
 
+Current source milestone: `0.5.0-dev` (read-only Task review). Earlier numbered
+slices below describe implementation areas, not completed stable releases.
+
 1. v0.1: read-only `doctor` and `CREATE + QUICK` plan.
 2. v0.2 (implemented): plan-bound apply for an empty or allowlisted target, local run state, non-overwriting atomic creates, manifest-last ordering, validation, and rollback.
 3. v0.3 (implemented as read-only planning): ADOPT inventory, user-owned conflicts, Task classification, and local Git analysis. ADOPT apply remains disabled.
@@ -9,3 +12,9 @@ CREATE validations (`agents-size-v1`, `manifest-schema-v1`, `project-required-se
 5. Later: REINITIALIZE and its separately approved destructive options.
 
 Unsupported commands return `UNSUPPORTED_CAPABILITY`; no adapter may emulate a missing engine capability with ad-hoc writes.
+
+Task workflow first slice (implemented, read-only): structural bilingual Task
+classification, bounded TaskIntent decoding, and `task plan` branch/readiness
+review. It emits a separate TaskReviewPlan; it does not allocate task IDs,
+render templates, persist local state, or enable task apply. Task creation
+requires a later approval, journal and recovery extension.

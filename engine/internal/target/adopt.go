@@ -19,6 +19,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/kimNarr/Exord-init/engine/internal/protocol"
+	taskcontract "github.com/kimNarr/Exord-init/engine/internal/task"
 	"golang.org/x/text/unicode/norm"
 )
 
@@ -298,8 +299,7 @@ func classifyTask(root *os.Root, entry adoptEntry) string {
 	if err != nil {
 		return "UNREADABLE"
 	}
-	text := string(data)
-	if strings.Contains(text, "task_id:") && strings.Contains(text, "status:") && strings.Contains(text, "## Goal") {
+	if _, err := taskcontract.ParseDocument(data); err == nil {
 		return "EXORD_TASK"
 	}
 	return "USER_OWNED"
