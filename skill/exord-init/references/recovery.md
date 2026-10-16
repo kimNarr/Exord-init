@@ -7,7 +7,7 @@ Run `recover list --target <dir>` first to enumerate retained bundles and their 
 1. Run `recover inspect` with the exact target and run ID.
 2. Verify the returned run, plan, spec hash, target identity, disposition, and every operation.
 3. If disposition is `CONFLICT`, preserve the target and ask the user to resolve the listed paths. Do not retry rollback automatically.
-4. If disposition is `ROLLBACK_READY`, explain that empty directories and the failed run bundle will remain.
+4. If disposition is `ROLLBACK_READY`, explain that empty directories, any `.exord-create-*` temporary file left by an interrupted publish, and the failed run bundle will remain. A later CREATE plan on the same target is refused until the user removes those leftovers by hand.
 5. Obtain a new Approval whose `approved_action` is exactly `RECOVER_ROLLBACK` and whose bindings match the inspection result.
 6. Invoke `recover rollback` once. On failure, inspect again rather than looping.
 7. Once the run is settled (`FAILED` after rollback), you may `recover discard` it with a `RECOVER_DISCARD` approval if the user wants the bundle removed.

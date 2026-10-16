@@ -3,7 +3,6 @@ package apply
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -78,56 +77,6 @@ func TestExecuteClassifiesCorruptStoredPlanSeparately(t *testing.T) {
 	}
 }
 
-func TestFaultAfterPublishLeavesRecoverableJournal(t *testing.T) {
-	targetPath, projectRoot, runID, prepared := prepareRun(t)
-	injected := errors.New("test-only interruption")
-	_, failure := execute(targetPath, projectRoot, runID, approvalFor(runID, prepared.Plan), func(stage string) error {
-		if stage == "after-publish:AGENTS.md" {
-			return injected
-		}
-		return nil
-	}, nil)
-	if failure == nil || failure.Code != "RECOVERY_REQUIRED" || !errors.Is(failure.Err, injected) {
-		t.Fatalf("expected injected recovery failure, got %#v", failure)
-	}
-	if _, err := os.Stat(filepath.Join(targetPath, "AGENTS.md")); err != nil {
-		t.Fatalf("published file should remain for recovery inspection: %v", err)
-	}
-	_, _, journal, err := state.Load(projectRoot, runID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if journal.Status != "RECOVERY_REQUIRED" || journal.Stage != "FILES_APPLYING" {
-		t.Fatalf("unexpected recovery journal: %#v", journal)
-	}
-}
-
-func TestFaultBeforeValidationLeavesAllOperationsApplied(t *testing.T) {
-	targetPath, projectRoot, runID, prepared := prepareRun(t)
-	injected := errors.New("test-only interruption")
-	_, failure := execute(targetPath, projectRoot, runID, approvalFor(runID, prepared.Plan), func(stage string) error {
-		if stage == "before-validation" {
-			return injected
-		}
-		return nil
-	}, nil)
-	if failure == nil || failure.Code != "RECOVERY_REQUIRED" || !errors.Is(failure.Err, injected) {
-		t.Fatalf("expected injected recovery failure, got %#v", failure)
-	}
-	_, _, journal, err := state.Load(projectRoot, runID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if journal.Status != "RECOVERY_REQUIRED" || journal.Stage != "FILES_APPLIED" {
-		t.Fatalf("unexpected pre-validation journal: %#v", journal)
-	}
-	for _, operation := range journal.Operations {
-		if operation.Status != "APPLIED" {
-			t.Fatalf("operation %s was not journaled as applied: %s", operation.Path, operation.Status)
-		}
-	}
-}
-
 func TestWriteCreateNeverOverwritesExistingPath(t *testing.T) {
 	rootPath := t.TempDir()
 	destination := filepath.Join(rootPath, "AGENTS.md")
@@ -139,7 +88,7 @@ func TestWriteCreateNeverOverwritesExistingPath(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer root.Close()
-	if _, _, err := writeCreate(root, "AGENTS.md", []byte("generated\n")); err == nil {
+	if _, _, err := writeCreate(root, "AGENTS.md", []byte("generated\n"), nil); err == nil {
 		t.Fatal("expected existing destination rejection")
 	}
 	content, err := os.ReadFile(destination)
@@ -157,11 +106,11 @@ func TestRollbackRemovesOnlyUnmodifiedGeneratedFiles(t *testing.T) {
 	defer root.Close()
 	firstContent := []byte("first\n")
 	secondContent := []byte("second\n")
-	firstPath, firstDirs, err := writeCreate(root, "docs/first.md", firstContent)
+	firstPath, firstDirs, err := writeCreate(root, "docs/first.md", firstContent, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	secondPath, secondDirs, err := writeCreate(root, "second.md", secondContent)
+	secondPath, secondDirs, err := writeCreate(root, "second.md", secondContent, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +122,7 @@ func TestRollbackRemovesOnlyUnmodifiedGeneratedFiles(t *testing.T) {
 		{Path: firstPath, ExpectedSHA256: sha256Hex(firstContent), Directories: firstDirs},
 		{Path: secondPath, ExpectedSHA256: sha256Hex(secondContent), Directories: secondDirs},
 	}
-	if rollback(root, created, &journal) {
+	if complete, err := rollback(root, created, &journal, nil); err != nil || complete {
 		t.Fatal("rollback must report incomplete when a generated file was modified")
 	}
 	if _, err := os.Stat(filepath.Join(rootPath, "docs", "first.md")); err != nil {

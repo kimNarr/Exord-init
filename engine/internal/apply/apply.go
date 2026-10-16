@@ -21,6 +21,10 @@ import (
 
 const maxStagedFileBytes = 4 << 20
 
+// ErrHardLinksUnsupported lets callers present safe guidance without exposing
+// filesystem paths from the underlying LinkError.
+var ErrHardLinksUnsupported = errors.New("filesystem does not support hard-link publication")
+
 type Failure struct {
 	Code string
 	Err  error
@@ -35,7 +39,39 @@ type Outcome struct {
 	CleanupPending bool
 }
 
+// faultInjector simulates a process crash at a named point. It exists only
+// for tests: Execute always passes nil, and no flag, environment variable, or
+// other external input can supply one. When it returns an error, execution
+// stops immediately with no further journal writes, rollback, or deferred
+// cleanup, leaving exactly the on-disk state a killed process would.
 type faultInjector func(stage string) error
+
+// simulatedCrash marks an error produced by a faultInjector so callers stop
+// instead of treating it as an ordinary, rollback-worthy failure.
+type simulatedCrash struct{ err error }
+
+func (crash *simulatedCrash) Error() string { return crash.err.Error() }
+func (crash *simulatedCrash) Unwrap() error { return crash.err }
+
+func (inject faultInjector) at(stage string) error {
+	if inject == nil {
+		return nil
+	}
+	if err := inject(stage); err != nil {
+		return &simulatedCrash{err: err}
+	}
+	return nil
+}
+
+func isSimulatedCrash(err error) bool {
+	var crash *simulatedCrash
+	return errors.As(err, &crash)
+}
+
+func crashed(err error) (Outcome, *Failure) {
+	return Outcome{}, &Failure{Code: "RECOVERY_REQUIRED", Err: err}
+}
+
 type validatorFunc func(targetRoot *os.Root, plan protocol.SetupPlan, created []createdFile) error
 
 func DecodeApproval(data []byte) (protocol.Approval, error) {
@@ -84,47 +120,50 @@ func execute(targetPath, projectRoot, runID string, approval protocol.Approval, 
 			return Outcome{}, &Failure{Code: "APPLY_FAILED", Err: err}
 		}
 	}
+	if err := inject.at("after-approved"); err != nil {
+		return crashed(err)
+	}
 	journal.Stage = "FILES_APPLYING"
 	if err := state.WriteJournal(runDir, journal); err != nil {
 		return Outcome{}, &Failure{Code: "APPLY_FAILED", Err: err}
 	}
+	if err := inject.at("after-files-applying"); err != nil {
+		return crashed(err)
+	}
 	created := make([]createdFile, 0, len(ordered))
 	for _, staged := range ordered {
 		operation := staged.Operation
+		slashPath := filepath.ToSlash(operation.Path)
 		setOperationStatus(&journal, operation.Path, "APPLYING")
 		if err := state.WriteJournal(runDir, journal); err != nil {
-			return failWithRollback(targetRoot, runDir, journal, created, err)
+			return failWithRollback(targetRoot, runDir, journal, created, err, inject)
 		}
-		createdPath, directories, err := writeCreate(targetRoot, operation.Path, staged.Content)
+		if err := inject.at("after-applying:" + slashPath); err != nil {
+			return crashed(err)
+		}
+		createdPath, directories, err := writeCreate(targetRoot, operation.Path, staged.Content, inject)
 		if err != nil {
-			return failWithRollback(targetRoot, runDir, journal, created, err)
+			if isSimulatedCrash(err) {
+				return crashed(err)
+			}
+			return failWithRollback(targetRoot, runDir, journal, created, err, inject)
 		}
 		created = append(created, createdFile{Path: createdPath, ExpectedSHA256: operation.ExpectedSHA256, Directories: directories})
-		if inject != nil {
-			if err := inject("after-publish:" + filepath.ToSlash(operation.Path)); err != nil {
-				journal.Status = "RECOVERY_REQUIRED"
-				journal.Stage = "FILES_APPLYING"
-				_ = state.WriteJournal(runDir, journal)
-				return Outcome{}, &Failure{Code: "RECOVERY_REQUIRED", Err: err}
-			}
+		if err := inject.at("after-publish:" + slashPath); err != nil {
+			return crashed(err)
 		}
 		setOperationStatus(&journal, operation.Path, "APPLIED")
 		if err := state.WriteJournal(runDir, journal); err != nil {
-			return failWithRollback(targetRoot, runDir, journal, created, err)
+			return failWithRollback(targetRoot, runDir, journal, created, err, inject)
 		}
 	}
-	if inject != nil {
-		if err := inject("before-validation"); err != nil {
-			journal.Status = "RECOVERY_REQUIRED"
-			journal.Stage = "FILES_APPLIED"
-			_ = state.WriteJournal(runDir, journal)
-			return Outcome{}, &Failure{Code: "RECOVERY_REQUIRED", Err: err}
-		}
+	if err := inject.at("before-validation"); err != nil {
+		return crashed(err)
 	}
 	for _, file := range created {
 		actual, err := hashRootFile(targetRoot, file.Path)
 		if err != nil || actual != file.ExpectedSHA256 {
-			return failWithRollback(targetRoot, runDir, journal, created, errors.New("created file validation failed"))
+			return failWithRollback(targetRoot, runDir, journal, created, errors.New("created file validation failed"), inject)
 		}
 	}
 	validate := runValidations
@@ -132,16 +171,22 @@ func execute(targetPath, projectRoot, runID string, approval protocol.Approval, 
 		validate = customValidator
 	}
 	if err := validate(targetRoot, plan, created); err != nil {
-		return failWithRollback(targetRoot, runDir, journal, created, err)
+		return failWithRollback(targetRoot, runDir, journal, created, err, inject)
 	}
 	journal.Stage = "VALIDATED"
 	if err := state.WriteJournal(runDir, journal); err != nil {
 		return Outcome{}, &Failure{Code: "RECOVERY_REQUIRED", Err: err}
 	}
+	if err := inject.at("after-validated"); err != nil {
+		return crashed(err)
+	}
 	journal.Stage = "FINALIZED"
 	journal.Status = "FINALIZED"
 	if err := state.WriteJournal(runDir, journal); err != nil {
 		return Outcome{}, &Failure{Code: "RECOVERY_REQUIRED", Err: err}
+	}
+	if err := inject.at("after-finalized"); err != nil {
+		return crashed(err)
 	}
 	paths := make([]string, 0, len(created))
 	for _, file := range created {
@@ -225,8 +270,12 @@ type createdFile struct {
 	Directories    []string
 }
 
-func failWithRollback(targetRoot *os.Root, runDir string, journal protocol.RunJournal, created []createdFile, cause error) (Outcome, *Failure) {
-	if rollback(targetRoot, created, &journal) {
+func failWithRollback(targetRoot *os.Root, runDir string, journal protocol.RunJournal, created []createdFile, cause error, inject faultInjector) (Outcome, *Failure) {
+	complete, err := rollback(targetRoot, created, &journal, inject)
+	if err != nil {
+		return crashed(err)
+	}
+	if complete {
 		journal.Status = "FAILED"
 		journal.Stage = "ROLLED_BACK"
 		_ = state.WriteJournal(runDir, journal)
@@ -238,7 +287,10 @@ func failWithRollback(targetRoot *os.Root, runDir string, journal protocol.RunJo
 	return Outcome{}, &Failure{Code: "RECOVERY_REQUIRED", Err: cause}
 }
 
-func rollback(targetRoot *os.Root, created []createdFile, journal *protocol.RunJournal) bool {
+// rollback removes hash-matched files this run created, newest first. It
+// reports whether every file was removed; the error is non-nil only for a
+// simulated crash, in which case the caller must stop without journaling.
+func rollback(targetRoot *os.Root, created []createdFile, journal *protocol.RunJournal, inject faultInjector) (bool, error) {
 	ok := true
 	for index := len(created) - 1; index >= 0; index-- {
 		file := created[index]
@@ -247,13 +299,16 @@ func rollback(targetRoot *os.Root, created []createdFile, journal *protocol.RunJ
 			ok = false
 			continue
 		}
+		if err := inject.at("rollback-after-remove:" + filepath.ToSlash(file.Path)); err != nil {
+			return false, err
+		}
 		setOperationStatus(journal, filepath.ToSlash(file.Path), "ROLLED_BACK")
 		removeEmptyDirectories(targetRoot, file.Directories)
 	}
-	return ok
+	return ok, nil
 }
 
-func writeCreate(root *os.Root, relative string, content []byte) (string, []string, error) {
+func writeCreate(root *os.Root, relative string, content []byte, inject faultInjector) (string, []string, error) {
 	clean, err := cleanRelative(relative)
 	if err != nil {
 		return "", nil, err
@@ -267,8 +322,10 @@ func writeCreate(root *os.Root, relative string, content []byte) (string, []stri
 		return "", directories, err
 	}
 	createdDestination := false
+	// A simulated crash skips every deferred cleanup, as a killed process would.
+	crash := false
 	defer func() {
-		if !createdDestination {
+		if !createdDestination && !crash {
 			removeEmptyDirectories(root, directories)
 		}
 	}()
@@ -284,7 +341,7 @@ func writeCreate(root *os.Root, relative string, content []byte) (string, []stri
 	tempExists := true
 	defer func() {
 		_ = temp.Close()
-		if tempExists {
+		if tempExists && !crash {
 			_ = root.Remove(tempPath)
 		}
 	}()
@@ -297,6 +354,10 @@ func writeCreate(root *os.Root, relative string, content []byte) (string, []stri
 	if err := temp.Close(); err != nil {
 		return "", directories, err
 	}
+	if err := inject.at("after-temp-write:" + filepath.ToSlash(clean)); err != nil {
+		crash = true
+		return "", directories, err
+	}
 	if _, err := root.Lstat(clean); err == nil || !os.IsNotExist(err) {
 		return "", directories, errors.New("destination changed during apply")
 	}
@@ -304,11 +365,15 @@ func writeCreate(root *os.Root, relative string, content []byte) (string, []stri
 	// fails if the destination appeared concurrently; it never overwrites.
 	if err := root.Link(tempPath, clean); err != nil {
 		if isUnsupportedLinkError(err) {
-			return "", directories, fmt.Errorf("cannot publish %s (filesystem may not support hard links on this path): %w", clean, err)
+			return "", directories, fmt.Errorf("%w: %w", ErrHardLinksUnsupported, err)
 		}
 		return "", directories, err
 	}
 	createdDestination = true
+	if err := inject.at("after-link:" + filepath.ToSlash(clean)); err != nil {
+		crash = true
+		return "", directories, err
+	}
 	if err := root.Remove(tempPath); err == nil {
 		tempExists = false
 	}

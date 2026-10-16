@@ -427,10 +427,16 @@ class SchemaValidationTests(unittest.TestCase):
         (target / ".git").mkdir()
 
         def run(*args, check=True):
-            return subprocess.run(
+            completed = subprocess.run(
                 [binary, *args, "--json"],
-                check=check, capture_output=True, text=True, encoding="utf-8",
+                check=False, capture_output=True, text=True, encoding="utf-8",
             )
+            if check:
+                self.assertEqual(
+                    completed.returncode, 0,
+                    f"CLI failed: stdout={completed.stdout}; stderr={completed.stderr}",
+                )
+            return completed
 
         try:
             plan_result = json.loads(

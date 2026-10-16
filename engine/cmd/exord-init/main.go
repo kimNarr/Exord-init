@@ -598,8 +598,12 @@ func mapApplyExit(code string) int {
 func failure(command, code, message string, cause error) protocol.Result {
 	// Filesystem errors may contain absolute paths or sensitive names. Keep the
 	// machine-readable result stable and redacted by default.
-	_ = cause
-	return protocol.Result{SchemaVersion: 1, Command: command, Status: "FAILED", Code: code, MessageKey: message, Changed: false, Warnings: []string{}, NextActions: []string{}}
+	result := protocol.Result{SchemaVersion: 1, Command: command, Status: "FAILED", Code: code, MessageKey: message, Changed: false, Warnings: []string{}, NextActions: []string{}}
+	if errors.Is(cause, applyengine.ErrHardLinksUnsupported) {
+		result.MessageKey = "error.hard_links_unsupported"
+		result.NextActions = []string{"inspect the retained run with recover inspect before retrying", "use a local filesystem that supports hard links; create a fresh plan after recovery"}
+	}
+	return result
 }
 
 func emit(result protocol.Result, exitCode int) {

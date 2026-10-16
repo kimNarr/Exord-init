@@ -40,7 +40,7 @@ AI를 활용해 프로젝트를 시작하면 제품 경계를 이해하기 전�
 | `recover list` 잔여 run 발견과 복구 필요 run 존재 시 plan 차단 | 구현됨 |
 | 정착된(rolled-back·finalized·미적용) run에 대한 승인 결합 `recover discard` | 구현됨 |
 | 완료 전 실행되는 선언된 apply 검증(`agents-size`, `manifest-schema`, `project-required-sections`) | 구현됨 |
-| 테스트 전용 fault injection(현재 2단계: 파일 publication 이후, 검증 직전) | 구현됨 |
+| 테스트 전용 crash matrix(apply 모든 단계와 rollback 도중, recovery까지 검증) | 구현됨 |
 | 기존 exord-init 프로젝트에 대한 읽기 전용 `plan --upgrade` 분석 | 구현됨 |
 | Upgrade apply 및 추가 fault 단계 | 남은 v0.4 작업으로 계획됨 |
 | `CUSTOM`, `REINITIALIZE`, ADOPT apply | 미구현 |
@@ -337,7 +337,7 @@ EXORD_INIT_BIN=./bin/exord-init python -m unittest discover -s tests -p '*_test.
 1. v0.1: 읽기 전용 `doctor`와 `CREATE + QUICK` 계획 — 구현됨
 2. v0.2: 안전한 `CREATE + QUICK` plan-bound apply — 구현됨
 3. v0.3: 읽기 전용 `ADOPT` inventory, 충돌 분석, Task 및 Git 분석 — 구현됨
-4. v0.4: 복구 명령, upgrade 동작과 fault injection — 복구 검사, 승인형 rollback, `recover list` 발견과 plan 사전 차단, 정착 run에 대한 승인형 `recover discard`, 읽기 전용 `plan --upgrade` 분석, 선언된 apply 검증 실행과 두 apply fault 지점은 구현됐으며 upgrade apply, finalized 상태 cleanup과 나머지 fault matrix는 남아 있음
+4. v0.4: 복구 명령, upgrade 동작과 fault injection — 복구 검사, 승인형 rollback, `recover list` 발견과 plan 사전 차단, 정착 run에 대한 승인형 `recover discard`, 읽기 전용 `plan --upgrade` 분석, 선언된 apply 검증 실행과 테스트 전용 apply crash matrix는 구현됐으며 upgrade apply와 finalized 상태 cleanup은 남아 있음
 5. 이후: 검증된 외부 백업과 별도 파괴적 승인을 요구하는 `REINITIALIZE`
 
 이 로드맵은 구현 순서를 나타내며 릴리스 일정을 약속하지 않습니다.

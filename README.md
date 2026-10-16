@@ -40,7 +40,7 @@ AI-assisted projects often accumulate framework choices, duplicated instructions
 | `recover list` retained-run discovery and pre-plan blocking on recovery-required runs | Implemented |
 | Approval-bound `recover discard` for settled (rolled-back, finalized, never-applied) runs | Implemented |
 | Declared apply validations (`agents-size`, `manifest-schema`, `project-required-sections`) executed before finalization | Implemented |
-| Test-only fault injection (currently 2 stages: after publication, before validation) | Implemented |
+| Test-only crash matrix (every apply step and mid-rollback, verified through recovery) | Implemented |
 | Read-only `plan --upgrade` analysis for an existing exord-init project | Implemented |
 | Upgrade apply and additional fault stages | Planned for the remaining v0.4 work |
 | `CUSTOM`, `REINITIALIZE`, and ADOPT apply | Not implemented |
@@ -347,7 +347,7 @@ The planned risk-ordered implementation sequence is:
 1. v0.1: read-only `doctor` and `CREATE + QUICK` planning — implemented.
 2. v0.2: safe `CREATE + QUICK` plan-bound apply — implemented.
 3. v0.3: read-only `ADOPT` inventory, conflict analysis, Task and Git analysis — implemented.
-4. v0.4: recovery commands, upgrade behavior, and fault injection — recovery inspection, approved rollback, `recover list` discovery with pre-plan blocking, approval-bound `recover discard` for settled runs, read-only `plan --upgrade` analysis, declared apply-validation execution, and two apply fault points are implemented; upgrade apply, finalized-state cleanup, and the remaining fault matrix are pending.
+4. v0.4: recovery commands, upgrade behavior, and fault injection — recovery inspection, approved rollback, `recover list` discovery with pre-plan blocking, approval-bound `recover discard` for settled runs, read-only `plan --upgrade` analysis, declared apply-validation execution, and the test-only apply crash matrix are implemented; upgrade apply and finalized-state cleanup are pending.
 5. Later: `REINITIALIZE` with verified external backup and separately approved destructive options.
 
 This roadmap describes implementation order, not a release commitment.

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	applyengine "github.com/kimNarr/Exord-init/engine/internal/apply"
 	"github.com/kimNarr/Exord-init/engine/internal/protocol"
 )
 
@@ -16,6 +18,20 @@ func TestFailureRedactsCause(t *testing.T) {
 	result := failure("plan", "UNSUPPORTED_TARGET", "error.target_unsafe", secretError("C:\\private\\secret.txt"))
 	if len(result.Warnings) != 0 {
 		t.Fatalf("cause leaked into result: %v", result.Warnings)
+	}
+}
+
+func TestHardLinkFailureProvidesRedactedRecoveryGuidance(t *testing.T) {
+	for _, code := range []string{"APPLY_FAILED", "RECOVERY_REQUIRED"} {
+		cause := fmt.Errorf("private-path-secret: %w", applyengine.ErrHardLinksUnsupported)
+		result := failure("apply", code, "error.apply_failed", cause)
+		if result.Code != code || result.MessageKey != "error.hard_links_unsupported" || len(result.NextActions) == 0 {
+			t.Fatalf("missing guidance or lost recovery code: %#v", result)
+		}
+		encoded, err := json.Marshal(result)
+		if err != nil || strings.Contains(string(encoded), "private-path-secret") {
+			t.Fatalf("error cause leaked: %s (%v)", encoded, err)
+		}
 	}
 }
 

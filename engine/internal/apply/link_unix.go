@@ -8,10 +8,9 @@ import (
 )
 
 // isUnsupportedLinkError reports whether a hard-link failure means the target
-// filesystem cannot create hard links. Linux returns EPERM for filesystems
-// such as vfat; the temporary file is always created by this run, so the
-// protected_hardlinks ownership check does not apply here. macOS and BSDs use
-// ENOTSUP/EOPNOTSUPP, which differ numerically on some of them.
+// filesystem cannot create hard links. EPERM is ambiguous: mount policies or
+// security controls can deny linking even when the filesystem supports it.
+// Keep it as an ordinary access error rather than claiming lack of support.
 func isUnsupportedLinkError(err error) bool {
 	var errno syscall.Errno
 	if !errors.As(err, &errno) {
@@ -19,5 +18,5 @@ func isUnsupportedLinkError(err error) bool {
 	}
 	// ENOTSUP and EOPNOTSUPP share a value on Linux, so they cannot both be
 	// switch cases.
-	return errno == syscall.EPERM || errno == syscall.ENOTSUP || errno == syscall.EOPNOTSUPP
+	return errno == syscall.ENOTSUP || errno == syscall.EOPNOTSUPP
 }
