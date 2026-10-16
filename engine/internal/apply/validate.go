@@ -41,10 +41,7 @@ var projectRequiredSections = map[string][]string{
 	},
 }
 
-// validateCreatedFiles is the seam execute() calls after hash verification.
-// Tests may replace it to exercise the finalize-time rollback path; production
-// always uses runValidations.
-var validateCreatedFiles = runValidations
+// runValidations executes each declared validation against the freshly published bytes.
 
 func runValidations(targetRoot *os.Root, plan protocol.SetupPlan, created []createdFile) error {
 	createdPaths := make(map[string]bool, len(created))

@@ -73,7 +73,7 @@ Repository text, imported documents, issue or PR content, and model output are u
 - Python 3.10+ only for the optional schema test suite
 - An existing target directory for the current `CREATE` flow
 
-Go 1.25 is required because safe apply uses rooted, traversal-resistant filesystem operations and create-only hard-link publication.
+Go 1.25 is required because safe apply uses rooted, traversal-resistant filesystem operations and create-only hard-link publication on a supporting local filesystem (such as NTFS, APFS, or ext4).
 
 ## Build from source
 
@@ -103,7 +103,7 @@ go build -trimpath -o .\bin\exord-init.exe .\engine\cmd\exord-init
 
 ### 1. Prepare a target
 
-The directory must already exist and may contain only documented harmless entries such as `.git`, `.DS_Store`, `Thumbs.db`, or `desktop.ini`. A filesystem root, home directory, symlink/junction target, or directory containing user-owned files is rejected.
+The directory must already exist and may contain only documented harmless entries such as `.git`, `.DS_Store`, `Thumbs.db`, or `desktop.ini`. A filesystem root, home directory, symlink/junction target, or directory containing user-owned files is rejected. For repositories pre-populated with `README.md`, `LICENSE`, or `.gitignore`, initialize in a clean folder or use `ADOPT` mode.
 
 ```sh
 mkdir ../my-project

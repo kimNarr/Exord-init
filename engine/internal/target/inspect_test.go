@@ -1,8 +1,10 @@
 package target
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -36,6 +38,26 @@ func TestInspectCreateRejectsUserOwnedEntry(t *testing.T) {
 	}
 	if _, err := InspectCreate(dir); err == nil {
 		t.Fatal("expected rejection")
+	}
+}
+
+func TestInspectCreateProvidesGuidanceForCommonRepoFiles(t *testing.T) {
+	for _, name := range []string{"README.md", "LICENSE", ".gitignore"} {
+		dir := canonicalTempDir(t)
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("pre-existing"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		_, err := InspectCreate(dir)
+		if err == nil {
+			t.Fatalf("expected rejection for %s", name)
+		}
+		if !errors.Is(err, ErrPreexistingRepoFile) {
+			t.Fatalf("expected ErrPreexistingRepoFile for %s, got: %v", name, err)
+		}
+		msg := err.Error()
+		if !strings.Contains(msg, "ADOPT mode") || !strings.Contains(msg, "clean folder") {
+			t.Fatalf("expected actionable guidance in error for %s, got: %s", name, msg)
+		}
 	}
 }
 

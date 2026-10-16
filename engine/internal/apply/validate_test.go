@@ -132,13 +132,11 @@ func TestRunValidationsRejectsTargetNotCreatedByRun(t *testing.T) {
 
 func TestExecuteRollsBackWhenValidationFails(t *testing.T) {
 	targetPath, projectRoot, runID, prepared := prepareRun(t)
-	original := validateCreatedFiles
-	validateCreatedFiles = func(*os.Root, protocol.SetupPlan, []createdFile) error {
+	customValidator := func(*os.Root, protocol.SetupPlan, []createdFile) error {
 		return errors.New("declared validation rejected the output")
 	}
-	defer func() { validateCreatedFiles = original }()
 
-	_, failure := Execute(targetPath, projectRoot, runID, approvalFor(runID, prepared.Plan))
+	_, failure := execute(targetPath, projectRoot, runID, approvalFor(runID, prepared.Plan), nil, customValidator)
 	if failure == nil || failure.Code != "APPLY_FAILED" {
 		t.Fatalf("expected APPLY_FAILED after validation failure, got %#v", failure)
 	}

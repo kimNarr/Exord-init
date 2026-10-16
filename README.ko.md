@@ -73,7 +73,7 @@ AI를 활용해 프로젝트를 시작하면 제품 경계를 이해하기 전�
 - 선택적 schema 테스트: Python 3.10 이상
 - 현재 `CREATE` 흐름에서 사용할 이미 존재하는 대상 디렉터리
 
-안전한 apply가 traversal-resistant rooted filesystem 작업과 create-only hard-link publication을 사용하므로 Go 1.25 이상이 필요합니다.
+안전한 apply가 traversal-resistant rooted filesystem 작업과 create-only hard-link publication을 사용하므로 Go 1.25 이상과 하드링크를 지원하는 로컬 파일시스템(NTFS, APFS, ext4 등)이 필요합니다.
 
 ## 소스에서 빌드
 
@@ -103,7 +103,7 @@ go build -trimpath -o .\bin\exord-init.exe .\engine\cmd\exord-init
 
 ### 1. 대상 폴더 준비
 
-대상 디렉터리는 이미 존재해야 하며 비어 있거나 `.git`, `.DS_Store`, `Thumbs.db`, `desktop.ini`처럼 문서에 명시된 안전 허용 항목만 포함할 수 있습니다. 파일시스템 루트, 사용자 홈, symlink·junction 대상 또는 사용자 소유 파일이 있는 폴더는 거부합니다.
+대상 디렉터리는 이미 존재해야 하며 비어 있거나 `.git`, `.DS_Store`, `Thumbs.db`, `desktop.ini`처럼 문서에 명시된 안전 허용 항목만 포함할 수 있습니다. 파일시스템 루트, 사용자 홈, symlink·junction 대상 또는 사용자 소유 파일이 있는 폴더는 거부합니다. 원격 저장소에서 `README.md`, `LICENSE`, `.gitignore`가 이미 포함된 채로 clone된 경우, 깨끗한 빈 폴더에서 `CREATE`를 수행하거나 `ADOPT` 모드를 사용해야 합니다.
 
 ```sh
 mkdir ../my-project

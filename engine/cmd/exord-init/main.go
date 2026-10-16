@@ -119,7 +119,11 @@ func runPlan(args []string) {
 	}
 	inspection, err := target.InspectCreate(*targetPath)
 	if err != nil {
-		emit(failure("plan", "UNSUPPORTED_TARGET", "error.target_unsafe", err), 4)
+		result := failure("plan", "UNSUPPORTED_TARGET", "error.target_unsafe", err)
+		if errors.Is(err, target.ErrPreexistingRepoFile) {
+			result.NextActions = []string{"initialize in a clean empty folder", "or prepare an ADOPT + QUICK intent to analyze the existing repository"}
+		}
+		emit(result, 4)
 	}
 	runID, err := id.UUID4()
 	if err != nil {

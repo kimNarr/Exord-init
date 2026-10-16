@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -35,6 +36,7 @@ type Outcome struct {
 }
 
 type faultInjector func(stage string) error
+type validatorFunc func(targetRoot *os.Root, plan protocol.SetupPlan, created []createdFile) error
 
 func DecodeApproval(data []byte) (protocol.Approval, error) {
 	value, err := approvalcontract.Decode(data)
@@ -45,10 +47,10 @@ func DecodeApproval(data []byte) (protocol.Approval, error) {
 }
 
 func Execute(targetPath, projectRoot, runID string, approval protocol.Approval) (Outcome, *Failure) {
-	return execute(targetPath, projectRoot, runID, approval, nil)
+	return execute(targetPath, projectRoot, runID, approval, nil, nil)
 }
 
-func execute(targetPath, projectRoot, runID string, approval protocol.Approval, inject faultInjector) (Outcome, *Failure) {
+func execute(targetPath, projectRoot, runID string, approval protocol.Approval, inject faultInjector, customValidator validatorFunc) (Outcome, *Failure) {
 	runDir, plan, journal, err := state.Load(projectRoot, runID)
 	if err != nil {
 		return Outcome{}, &Failure{Code: "PLAN_INVALID", Err: err}
@@ -125,7 +127,11 @@ func execute(targetPath, projectRoot, runID string, approval protocol.Approval, 
 			return failWithRollback(targetRoot, runDir, journal, created, errors.New("created file validation failed"))
 		}
 	}
-	if err := validateCreatedFiles(targetRoot, plan, created); err != nil {
+	validate := runValidations
+	if customValidator != nil {
+		validate = customValidator
+	}
+	if err := validate(targetRoot, plan, created); err != nil {
 		return failWithRollback(targetRoot, runDir, journal, created, err)
 	}
 	journal.Stage = "VALIDATED"
@@ -297,6 +303,9 @@ func writeCreate(root *os.Root, relative string, content []byte) (string, []stri
 	// Link atomically publishes the synced same-directory temporary file and
 	// fails if the destination appeared concurrently; it never overwrites.
 	if err := root.Link(tempPath, clean); err != nil {
+		if isUnsupportedLinkError(err) {
+			return "", directories, fmt.Errorf("cannot publish %s (filesystem may not support hard links on this path): %w", clean, err)
+		}
 		return "", directories, err
 	}
 	createdDestination = true

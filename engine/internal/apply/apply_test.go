@@ -86,7 +86,7 @@ func TestFaultAfterPublishLeavesRecoverableJournal(t *testing.T) {
 			return injected
 		}
 		return nil
-	})
+	}, nil)
 	if failure == nil || failure.Code != "RECOVERY_REQUIRED" || !errors.Is(failure.Err, injected) {
 		t.Fatalf("expected injected recovery failure, got %#v", failure)
 	}
@@ -110,7 +110,7 @@ func TestFaultBeforeValidationLeavesAllOperationsApplied(t *testing.T) {
 			return injected
 		}
 		return nil
-	})
+	}, nil)
 	if failure == nil || failure.Code != "RECOVERY_REQUIRED" || !errors.Is(failure.Err, injected) {
 		t.Fatalf("expected injected recovery failure, got %#v", failure)
 	}

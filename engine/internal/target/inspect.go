@@ -13,6 +13,11 @@ import (
 
 var harmless = map[string]bool{".git": true, ".DS_Store": true, "Thumbs.db": true, "desktop.ini": true}
 
+// ErrPreexistingRepoFile marks a CREATE rejection caused by files a hosted
+// repository typically starts with, so callers can suggest a clean folder or
+// ADOPT without echoing the raw error.
+var ErrPreexistingRepoFile = errors.New("CREATE target contains a pre-existing repository file")
+
 type Inspection struct {
 	Path           string   `json:"path"`
 	IdentitySHA256 string   `json:"identity_sha256"`
@@ -47,6 +52,9 @@ func InspectCreate(path string) (Inspection, error) {
 	for _, entry := range entries {
 		name := entry.Name()
 		if !harmless[name] {
+			if isCommonInitialRepoFile(name) {
+				return Inspection{}, fmt.Errorf("%w %q: CREATE requires an empty directory or allowlisted items (.git); for repositories pre-populated with %s, initialize in a clean folder or run plan with ADOPT mode", ErrPreexistingRepoFile, name, name)
+			}
 			return Inspection{}, fmt.Errorf("CREATE target contains user-owned entry: %s", name)
 		}
 		if entry.Type()&os.ModeSymlink != 0 {
@@ -114,4 +122,13 @@ func samePath(a, b string) bool {
 		return strings.EqualFold(aa, bb)
 	}
 	return aa == bb
+}
+
+func isCommonInitialRepoFile(name string) bool {
+	switch strings.ToLower(name) {
+	case "readme.md", "readme", "readme.txt", "license", "license.md", "license.txt", ".gitignore":
+		return true
+	default:
+		return false
+	}
 }
