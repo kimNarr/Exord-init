@@ -1,6 +1,6 @@
 # Implementation slices
 
-Current source milestone: `0.5.0-dev` (read-only Task review). Earlier numbered
+Current source milestone: `0.6.0-dev` (local Task preparation). Earlier numbered
 slices below describe implementation areas, not completed stable releases.
 
 1. v0.1: read-only `doctor` and `CREATE + QUICK` plan.
@@ -18,3 +18,8 @@ classification, bounded TaskIntent decoding, and `task plan` branch/readiness
 review. It emits a separate TaskReviewPlan; it does not allocate task IDs,
 render templates, persist local state, or enable task apply. Task creation
 requires a later approval, journal and recovery extension.
+
+Task preparation slice (implemented): explicit `task plan --prepare` reserves a
+stable local ID, renders bilingual documents and preserves immutable plan/bytes
+revisions in Git-local metadata. Default review remains read-only. It does not
+publish TASK.md, create a CREATE run or enable task apply/recovery.

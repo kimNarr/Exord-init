@@ -1,6 +1,7 @@
 # Version policy
 
-The current development milestone is `0.5.0-dev`. The canonical source value
+The current development milestone is `0.6.0-dev` (local Task preparation).
+The canonical source value
 is `engine/internal/buildinfo/version.go`; the CLI default, generated manifest
 and upgrade comparison use it. Release builds must not override the CLI value
 with a version different from the embedded generator/templates.
@@ -22,7 +23,8 @@ it is a source checkpoint, not a binary or marketplace release.
 Protocol/schema and file-template versions have independent compatibility
 meaning. Increment them only when their own contracts change, and document the
 migration. This milestone retains protocol v1 and existing template version 1;
-new task schemas have schema_version 1 and capability `task:plan`. Consumers
+task review/preparation schemas have schema_version 1 and capabilities
+`task:plan` / `task:prepare`. Consumers
 discover optional commands via doctor capabilities. Task review hashes cannot
 authorize CREATE apply. The planning document v1.3 is a historical design
 checkpoint, not the engine's release version.

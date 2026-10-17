@@ -98,6 +98,17 @@ func TestListRetainedRunsFailsClosedOnUnparseableJournal(t *testing.T) {
 	}
 }
 
+func TestListRetainedRunsBlocksFutureJournalVersion(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "state")
+	journal := journalFor(runA, "ACTIVE", "PLANNED", "2026-10-17T00:00:00Z")
+	journal.SchemaVersion = 2
+	writeRunJournal(t, root, runA, journal)
+	runs, err := ListRetainedRuns(root)
+	if err != nil || len(runs) != 1 || !runs[0].BlocksNewPlan || runs[0].Status != "UNKNOWN" {
+		t.Fatalf("future journal must block even before apply: %#v %v", runs, err)
+	}
+}
+
 func TestDiscardRunRemovesBundleAndReportsChange(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "state")
 	writeRunJournal(t, root, runA, journalFor(runA, "FAILED", "ROLLED_BACK", "2026-09-10T00:00:00Z"))

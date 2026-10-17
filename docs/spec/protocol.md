@@ -44,7 +44,44 @@ stable ID/status/type, required fields) in either body language. Malformed,
 duplicate-key, alias-bearing or unknown metadata stays USER_OWNED. Recognition
 never permits replacement or claims that the engine generated the file.
 
-## Boundary
+## Task preparation (explicit local state)
+
+`task plan --prepare` adds capability `task:prepare`. Default `task plan` remains
+read-only. Preparation returns `data.task_preparation` matching
+`schemas/task-preparation.schema.json` (with draft identity from
+`schemas/task-draft.schema.json`). This mode is TASK_PREPARE, not CREATE:
+there is no run ID or approval request; task apply/recovery stay unsupported.
+`changed: false` concerns project output; `data.local_state_changed: true`
+discloses writes under `.git/exord-init/task-drafts/`. The document and Git index
+are not written. The shared project OS lock protects draft allocation.
+
+The engine re-inspects under lock, blocks unsafe branch/Task conditions and
+retained interrupted CREATE runs, scans bounded local IDs, then reserves a
+random `T-YYYYMMDD-XXXXXXXX` ID and UTC timestamp with a draft UUID. Default
+selection is by project and original work branch; `--draft-id` explicitly
+resumes that identity across a branch rename. Project/target bindings cannot
+change. One default draft per original branch is supported; new-task/reset and
+cleanup workflows are not yet implemented.
+
+The branch-directory key is SHA-256(project UUID + NUL + original branch).
+`identity.json` is created once. Each `plans/<spec_sha256>.json` stores the full
+preparation spec and exact LF document bytes. Records are synced and published
+via create-only hard links; linked state directories/files are rejected.
+Changed input/state preserves prior revisions; unchanged plans return the saved
+plan ID/bytes. The hash binds identity, generator version, review facts, collision
+evidence and expected document hash. Preview `updated_at` uses draft creation
+day; progress-based date changes are outside this slice. Corrupt or mis-bound
+records fail closed. Failures may retain identity or temporary metadata.
+
+Collision scans inspect other local branch names (257 max), up to 257 general
+commit messages and 257 Task patch entries, 32 worktrees' current Task paths and
+256 local draft identities. Git queries are limited to 8 MiB and 5 seconds each.
+History counts sum both passes; marker-bearing user messages may overcount.
+Limits are explicit and there is no fetch or remote-wide uniqueness guarantee.
+An ID in the current branch name alone does not conflict with its resumed draft.
+ID generation retries at most 32 times using cryptographic Crockford Base32 suffixes.
+
+## Setup boundary
 
 Adapters create a schema-valid SetupIntent. They cannot supply operations, risk counts, or a trusted hash. The engine inspects the target and exclusively creates the Setup Plan, canonical `spec_sha256`, and Result. An ADOPT plan may include `adopt_analysis` with bounded inventory, Git, Task, known-guidance, and conflict facts; an `UPGRADE` plan (`plan --upgrade`, no intent) includes `upgrade_analysis` with the manifest settings and a per-managed-file assessment. Both stay inside the hashed plan spec.
 

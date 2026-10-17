@@ -22,7 +22,7 @@ always NOT_RUN. Never execute proposed validation strings during review.
 
 No Task ID, timestamps, staged files, journal, lock, or local project state is
 created. Do not manufacture these or write TASK.md using shell commands. Task
-ID allocation, templates, approved apply and task recovery are later slices.
+This describes the default review; local preparation is a separate explicit option below.
 Existing TASK.md (including an alternate path) blocks creating another task.
 ADOPT recognizes structural metadata in either body language, but recognition
 never confers ownership or permission to replace a file.
@@ -33,3 +33,26 @@ main/dev/master, the chosen base branch, and optional manifest
 manifests and DOCUMENT_ONLY settings. Git-file worktrees, unborn or detached
 branches, mismatched work branches and in-progress Git operations yield
 blockers. Preserve existing project conventions when preparing the work branch.
+
+## Explicit local preparation
+
+When the user wants to preserve a draft, invoke `task plan --prepare` with the
+same intent and target (capability `task:prepare`). This writes local Git
+metadata under `.git/exord-init/task-drafts/`, not project Task files.
+Review `data.task_preparation`: stable draft UUID/Task ID, UTC creation time,
+exact document, CREATE operation and hashes, readiness gaps and scan limits.
+No approval is requested and no command is executed. Project `changed` stays
+false; `data.local_state_changed` discloses metadata writes.
+
+Keep the returned draft ID. Replanning on its original branch reuses it;
+`--draft-id <uuid>` reuses it after renaming a work branch. Changed input/state
+adds an immutable revision rather than replacing a reviewed plan. Corrupt or
+conflicting records stop preparation. Bounded local branch/history/worktree
+checks may be incomplete; do not claim global uniqueness or fetch remote
+records. The current branch's own ID in its name is not an unrelated collision.
+Current Task files still block creation; local draft IDs are checked under lock.
+
+Drafts are not CREATE runs: `recover list/discard` do not clean them up.
+On failure retain local evidence; do not delete drafts or copy previews into
+TASK.md to simulate apply. New tasks on a previously used branch, task-state
+cleanup, approved publication and task recovery remain later slices.

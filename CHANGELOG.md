@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.6.0-dev — 2026-10-17
+
+- Added explicit `task plan --prepare` for local Task IDs, bilingual exact
+  document previews and immutable plan revisions. Plain task plan stays read-only.
+- Added bounded local branch/history/worktree/draft collision checks and explicit
+  draft selection across work-branch renames. No fetch or remote uniqueness claim.
+- Added rooted, project-locked Git-local draft storage with create-only publication,
+  corruption checks and stable identity reuse across intent changes.
+- Added local identity/preparation schemas and verification of preserved bytes.
+- Fixed stream-copy bypass of the local Git output size limit and added a
+  regression test. Classified local state replacement failures without leaking paths.
+- Added fail-closed future journal compatibility coverage and a separate,
+  unimplemented Task approval/apply/recovery contract proposal.
+
+Task publication, task apply/recovery, cleanup and new-task-on-used-branch flows
+remain unsupported. This is a development source milestone, not a stable release
+or an installer/binary distribution.
+
 ## 0.5.0-dev — 2026-10-16
 
 - Added read-only `task plan`, TaskIntent and TaskReviewPlan schemas, branch

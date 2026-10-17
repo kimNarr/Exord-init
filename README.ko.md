@@ -8,7 +8,7 @@
 
 이 프로젝트 자체도 바이브코딩 방식으로 개발하고 있습니다. 사용자가 제품 방향과 안전 관련 결정을 주도하고 AI 코딩 에이전트가 조사, 설계, 구현, 리뷰와 테스트를 지원합니다. 여기서 바이브코딩은 검증을 생략한다는 뜻이 아닙니다. 명시적인 계약, plan-bound 승인, 자동화 테스트와 사용자 리뷰를 통해 AI가 생성한 변경을 추적하고 검증합니다.
 
-> 개발 상태: **v0.5.0-dev 개발 프로토타입**. 아직 안정 릴리스나 공식 설치 프로그램은 없습니다. 현재 엔진은 안전한 `CREATE + QUICK` 적용, 읽기 전용 `ADOPT + QUICK`·upgrade 분석, 복구와 읽기 전용 `task plan`을 지원합니다. [변경 이력](CHANGELOG.md)과 [버전 관리 기준](docs/spec/versioning.md)을 참고하세요.
+> 개발 상태: **v0.6.0-dev 개발 프로토타입**. 아직 안정 릴리스나 공식 설치 프로그램은 없습니다. CREATE 적용, 읽기 전용 ADOPT·upgrade·Task 검토, 로컬 Task 초안 준비와 CREATE 복구를 지원합니다. [변경 이력](CHANGELOG.md)과 [버전 관리 기준](docs/spec/versioning.md)을 참고하세요.
 
 ## 만드는 이유
 
@@ -46,6 +46,7 @@ AI를 활용해 프로젝트를 시작하면 제품 경계를 이해하기 전�
 | `CUSTOM`, `REINITIALIZE`, ADOPT apply | 미구현 |
 | Task 및 Git 분석 | ADOPT에서 구현됨, 생성 기능은 계획 단계 |
 | `task:plan` / `task plan` | TaskIntent·준비도·작업 브랜치 읽기 전용 검토. Task 생성·apply는 미지원 |
+| `task:prepare` / `task plan --prepare` | 로컬 Git 메타데이터에 Task ID·한영 문서 미리보기 보존. TASK.md 실제 생성·apply는 미지원 |
 | commit, branch, remote와 push 자동화 | 미구현 |
 | 제품별 plugin 및 extension package | 미배포 |
 
@@ -262,6 +263,37 @@ Task ID, 파일, staging, 승인 요청과 로컬 실행 상태를 생성하지 
 `task apply`, linked worktree 지원과 Task 갱신은 후속 범위입니다.
 같은 입력·검사 상태를 다시 검토하면 spec hash는 같고 plan ID는 달라집니다.
 이 검토 해시를 CREATE apply나 복구 승인으로 사용할 수 없습니다.
+
+### 초안 ID와 정확한 문서 계획 보존
+
+```sh
+./bin/exord-init task plan --prepare --intent ./task-intent.json --target ../my-project --json
+# 작업 브랜치 이름을 바꿨을 때 기존 초안 재사용:
+./bin/exord-init task plan --prepare --draft-id <draft_uuid> --intent ./task-intent.json --target ../my-project --json
+```
+
+명시적인 `--prepare`는 프로젝트 잠금을 잡고 `.git/exord-init/task-drafts/`에만
+로컬 상태를 씁니다. `data.task_preparation`에 고정 초안 UUID,
+`T-YYYYMMDD-XXXXXXXX` Task ID, UTC 생성 시각, 정확한 UTF-8/LF 문서 내용,
+CREATE 작업과 해시를 반환합니다. `changed: false`는 프로젝트 결과물을 뜻하며,
+메타데이터 쓰기는 `data.local_state_changed`로 표시합니다.
+승인 요청·CREATE run·추적 파일·Git index는 생성하거나 변경하지 않습니다.
+
+기본 초안은 프로젝트와 최초 작업 브랜치로 선택합니다. 같은 브랜치에서는 ID를
+재사용하며, 브랜치 이름을 바꾸면 반환된 `draft_id`를 명시합니다. 불변 식별 기록은
+최초 브랜치를 유지하고 문서·계획에는 현재 브랜치를 반영합니다. 동일한 계획은
+저장한 결과를 재사용하고, 입력·상태가 바뀌면 이전 내용을 보존하면서 해시별 JSON에
+새 계획과 문서 내용을 함께 저장합니다. `updated_at`은 초안 생성일로 고정합니다.
+사용한 브랜치에서 새 Task 시작, 초안 폐기와 실제 진행 후 날짜 갱신은 아직 자동화하지 않습니다.
+
+충돌 검사는 다른 로컬 브랜치 이름(최대 257개), commit 메시지와 Task 변경 이력
+(각 257개·Git 질의당 출력 8 MiB·5초), 최대 32개 worktree의 Task와 256개 로컬
+초안을 대상으로 합니다. `collision_scan.limits`에 부분 검사 범위를 표시하며
+history 개수는 두 검사 항목 수의 합으로 고유 commit 수가 아닙니다.
+네트워크 fetch나 원격 전체의 유일성 보장은 없습니다. 손상·충돌하는 기록은
+덮어쓰지 않고 중단합니다. 실패 시 ID·임시 메타데이터가 남을 수 있으며 자동 정리는
+아직 없습니다. `recover list/discard`는 CREATE run 전용입니다. `task apply`·Task
+복구는 미지원이며, 미리보기를 대상에 직접 복사해 적용을 대신하지 않습니다.
 
 ## 읽기 전용 upgrade 분석: `plan --upgrade`
 

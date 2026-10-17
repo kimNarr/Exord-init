@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://exord-init.dev/schema/task-preparation-v1.json",
+  "title": "Local task preparation snapshot v1",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "plan_id", "spec", "spec_sha256", "document"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "plan_id": {"type": "string", "format": "uuid"},
+    "spec_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "document": {"type": "string", "maxLength": 65536},
+    "spec": {
+      "type": "object", "additionalProperties": false,
+      "required": ["mode", "generator_version", "draft", "review", "collision_scan", "operations"],
+      "properties": {
+        "mode": {"const": "TASK_PREPARE"},
+        "generator_version": {"type": "string", "minLength": 1},
+        "draft": {"$ref": "task-draft-v1.json"},
+        "review": {"allOf": [{"$ref": "task-plan-v1.json#/properties/spec"}, {"properties": {"disposition": {"enum": ["DRAFT", "READY_FOR_REVIEW"]}}}]},
+        "collision_scan": {
+          "type": "object", "additionalProperties": false,
+          "required": ["branches", "worktrees", "history_commits", "limits"],
+          "properties": {
+            "branches": {"type": "integer", "minimum": 0, "maximum": 257},
+            "worktrees": {"type": "integer", "minimum": 0, "maximum": 32},
+            "history_commits": {"type": "integer", "minimum": 0},
+            "limits": {"type": "array", "uniqueItems": true, "items": {"enum": ["LOCAL_BRANCH_LIMIT", "LOCAL_HISTORY_LIMIT", "WORKTREE_LIST_LIMIT", "WORKTREE_COUNT_LIMIT", "WORKTREE_UNREADABLE", "WORKTREE_TASK_UNREADABLE"]}}
+          }
+        },
+        "operations": {"type": "array", "minItems": 1, "maxItems": 1, "items": {"allOf": [{"$ref": "plan-v1.json#/$defs/operation"}, {"properties": {"path": {"enum": ["TASK.md", ".exord/TASK.md"]}, "template_id": {"enum": ["task-core-en-v1", "task-core-ko-v1"]}}}]}}
+      }
+    }
+  }
+}

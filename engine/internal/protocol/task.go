@@ -43,3 +43,39 @@ type TaskReviewPlan struct {
 	Spec          TaskReviewSpec `json:"spec"`
 	SpecSHA256    string         `json:"spec_sha256"`
 }
+
+// TaskDraft identifies one local task draft independently of plan revisions.
+type TaskDraft struct {
+	SchemaVersion        int    `json:"schema_version"`
+	DraftID              string `json:"draft_id"`
+	TaskID               string `json:"task_id"`
+	CreatedAt            string `json:"created_at"`
+	ProjectID            string `json:"project_id"`
+	TargetIdentitySHA256 string `json:"target_identity_sha256"`
+	WorkBranch           string `json:"work_branch"`
+}
+
+type TaskCollisionScan struct {
+	Branches       int      `json:"branches"`
+	Worktrees      int      `json:"worktrees"`
+	HistoryCommits int      `json:"history_commits"`
+	Limits         []string `json:"limits"`
+}
+
+type TaskPreparationSpec struct {
+	Mode             string            `json:"mode"`
+	GeneratorVersion string            `json:"generator_version"`
+	Draft            TaskDraft         `json:"draft"`
+	Review           TaskReviewSpec    `json:"review"`
+	CollisionScan    TaskCollisionScan `json:"collision_scan"`
+	Operations       []Operation       `json:"operations"`
+}
+
+// TaskPreparation is a local snapshot, never an applicable CREATE plan.
+type TaskPreparation struct {
+	SchemaVersion int                 `json:"schema_version"`
+	PlanID        string              `json:"plan_id"`
+	Spec          TaskPreparationSpec `json:"spec"`
+	SpecSHA256    string              `json:"spec_sha256"`
+	Document      string              `json:"document"`
+}

@@ -34,6 +34,7 @@ var engineCapabilities = []string{
 	"plan:adopt-quick",
 	"plan:upgrade",
 	"task:plan",
+	"task:prepare",
 	"recover:inspect",
 	"recover:rollback",
 	"recover:list",
@@ -69,6 +70,9 @@ func runDoctor(args []string) {
 	}
 	_ = jsonOutput
 	for _, language := range []string{"en", "ko"} {
+		if _, err := exordinit.RenderTaskTemplate(language, exordinit.TaskTemplateData{Metadata: "schema_version: 1\n", Title: "doctor"}); err != nil {
+			emit(failure("doctor", "INTERNAL_ERROR", "error.embedded_task_template", err), 10)
+		}
 		for _, name := range []string{"AGENTS.md", "PROJECT.md", "CLAUDE.md", "GEMINI.md"} {
 			if _, err := exordinit.RenderTemplate(language, name, exordinit.TemplateData{ProjectSummary: "doctor"}); err != nil {
 				emit(failure("doctor", "INTERNAL_ERROR", "error.embedded_template", err), 10)
@@ -606,6 +610,10 @@ func failure(command, code, message string, cause error) protocol.Result {
 	if errors.Is(cause, applyengine.ErrHardLinksUnsupported) {
 		result.MessageKey = "error.hard_links_unsupported"
 		result.NextActions = []string{"inspect the retained run with recover inspect before retrying", "use a local filesystem that supports hard links; create a fresh plan after recovery"}
+	}
+	if errors.Is(cause, state.ErrStateReplace) {
+		result.MessageKey = "error.local_state_replace"
+		result.NextActions = []string{"preserve the local run state and inspect the retained run before retrying", "check local filesystem access and file-sharing restrictions; no state replacement was confirmed"}
 	}
 	return result
 }

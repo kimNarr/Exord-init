@@ -4,13 +4,12 @@ Status: DRAFT. This document proposes the next implementation slice; it does
 not advertise a supported CLI capability. Existing CREATE, ADOPT, upgrade,
 approval, and recovery contracts continue to describe shipped behavior.
 
-Implementation checkpoint (2026-10-16): `task plan` now performs only the
-read-only intent/branch/readiness review documented in `protocol.md`. Its
-separate TaskReviewPlan does not allocate IDs or timestamps, render a document,
-persist local state, stage files or request approval. ID allocation and
-collision checks below are future task-creation requirements. `task apply`
-remains a proposal and is explicitly unsupported. The implemented subset in
-`protocol.md` takes precedence over the proposal below.
+Implementation checkpoint (2026-10-16): default `task plan` is a read-only
+intent/branch/readiness review. Explicit `--prepare` now reserves a stable local
+Task ID, performs bounded collision checks, renders document previews and
+preserves immutable local plan revisions. Neither requests approval or publishes
+TASK.md. Task apply remains unsupported. The implemented subset in `protocol.md`
+takes precedence over future-facing proposals below.
 
 ## Purpose
 
@@ -132,6 +131,10 @@ task on configured integration branches.
   branch/commit/network actions.
 
 ## Delivery order
+
+The next apply/approval/journal proposal is detailed in
+[task-apply-contract-draft.md](task-apply-contract-draft.md). It is not a current
+runtime capability.
 
 1. Adopt the command and protocol proposal in implementation-facing specs.
 2. Add bounded structural Task classification, TaskIntent schema and parser tests.

@@ -13,7 +13,26 @@ var templateFiles embed.FS
 
 type TemplateData struct{ ProjectSummary string }
 
+type TaskTemplateData struct {
+	Title              string
+	Metadata           string
+	Goal               string
+	Scope              []string
+	NonGoals           []string
+	AcceptanceCriteria []string
+	Plan               []string
+	Validation         []string
+}
+
 func RenderTemplate(language, name string, data TemplateData) (string, error) {
+	return renderTemplate(language, name, data)
+}
+
+func RenderTaskTemplate(language string, data TaskTemplateData) (string, error) {
+	return renderTemplate(language, "TASK.md", data)
+}
+
+func renderTemplate(language, name string, data any) (string, error) {
 	if language != "en" && language != "ko" {
 		return "", errors.New("unsupported template language")
 	}

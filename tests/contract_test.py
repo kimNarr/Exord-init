@@ -22,6 +22,8 @@ class ContractTests(unittest.TestCase):
                 "run.schema.json",
                 "task-intent.schema.json",
                 "task-plan.schema.json",
+                "task-draft.schema.json",
+                "task-preparation.schema.json",
             },
         )
         for path in schema_paths:
@@ -73,7 +75,7 @@ class ContractTests(unittest.TestCase):
         )
         block = source.split("engineCapabilities = []string{", 1)[1].split("}", 1)[0]
         capabilities = [line.split('"')[1] for line in block.splitlines() if '"' in line]
-        self.assertEqual(len(capabilities), 10)
+        self.assertEqual(len(capabilities), 11)
         readmes = [
             (ROOT / "README.md").read_text(encoding="utf-8"),
             (ROOT / "README.ko.md").read_text(encoding="utf-8"),

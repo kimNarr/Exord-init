@@ -20,6 +20,7 @@ import (
 var (
 	ErrLocked             = errors.New("project state is locked")
 	ErrUnsupportedGitFile = errors.New("gitfile state is unsupported")
+	ErrStateReplace       = errors.New("local state replacement failed")
 	errLockHeld           = errors.New("lock held by another process")
 )
 
@@ -27,6 +28,7 @@ type Lock struct {
 	path       string
 	file       *os.File
 	ownerToken string
+	root       *os.Root // optional rooted access used by task-draft state
 }
 
 type lockState struct {
@@ -175,6 +177,9 @@ func (lock *Lock) Release() error {
 	if !ownershipOK {
 		return errors.New("project lock ownership changed")
 	}
+	if lock.root != nil {
+		return lock.root.Remove("lock.json")
+	}
 	return os.Remove(lock.path)
 }
 
@@ -316,7 +321,7 @@ func atomicWrite(path string, data []byte, mode os.FileMode) error {
 		return err
 	}
 	if err := replaceFile(tempPath, path); err != nil {
-		return err
+		return fmt.Errorf("%w: %w", ErrStateReplace, err)
 	}
 	ok = true
 	return nil

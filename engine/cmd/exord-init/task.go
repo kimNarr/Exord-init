@@ -19,6 +19,8 @@ func runTask(args []string) {
 	flags := flag.NewFlagSet("task plan", flag.ContinueOnError)
 	intentPath := flags.String("intent", "", "path to TaskIntent JSON")
 	targetPath := flags.String("target", "", "existing exord project directory")
+	prepare := flags.Bool("prepare", false, "preserve a local draft ID and exact document plan; does not create TASK.md")
+	draftID := flags.String("draft-id", "", "reuse an existing draft explicitly, including after a work-branch rename")
 	expectedProtocol := flags.Int("protocol-version", protocolVersion, "expected protocol version")
 	flags.Bool("json", false, "emit JSON (always enabled)")
 	flags.SetOutput(os.Stderr)
@@ -27,6 +29,9 @@ func runTask(args []string) {
 	}
 	if *expectedProtocol != protocolVersion {
 		emit(failure("task", "VERSION_MISMATCH", "error.protocol_version", nil), 7)
+	}
+	if *draftID != "" && (!*prepare || !taskcontract.ValidDraftID(*draftID)) {
+		emit(failure("task", "INVALID_INTENT", "error.task_draft_flags", nil), 2)
 	}
 	file, err := os.Open(*intentPath)
 	if err != nil {
@@ -51,6 +56,10 @@ func runTask(args []string) {
 	plan, err := planner.BuildTaskReview(intent, inspection)
 	if err != nil {
 		emit(failure("task", "INTERNAL_ERROR", "error.task_plan", err), 10)
+	}
+	if *prepare && plan.Spec.Disposition != "BLOCKED" {
+		result, exit := prepareTaskLocally(*targetPath, intent, *draftID)
+		emit(result, exit)
 	}
 	status, code := "OK", "OK"
 	if plan.Spec.Disposition == "BLOCKED" {

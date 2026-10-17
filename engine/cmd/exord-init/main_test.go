@@ -12,6 +12,7 @@ import (
 
 	applyengine "github.com/kimNarr/Exord-init/engine/internal/apply"
 	"github.com/kimNarr/Exord-init/engine/internal/protocol"
+	"github.com/kimNarr/Exord-init/engine/internal/state"
 )
 
 func TestFailureRedactsCause(t *testing.T) {
@@ -36,6 +37,14 @@ func TestHardLinkFailureProvidesRedactedRecoveryGuidance(t *testing.T) {
 }
 
 type secretError string
+
+func TestStateReplacementFailureIsClassifiedWithoutLeakingPaths(t *testing.T) {
+	result := failure("apply", "RECOVERY_REQUIRED", "error.apply_failed", fmt.Errorf("private-path-secret: %w", state.ErrStateReplace))
+	encoded, err := json.Marshal(result)
+	if err != nil || result.Code != "RECOVERY_REQUIRED" || result.MessageKey != "error.local_state_replace" || len(result.NextActions) == 0 || strings.Contains(string(encoded), "private-path-secret") {
+		t.Fatalf("state diagnostics lost binding or leaked cause: %s %v", encoded, err)
+	}
+}
 
 func TestCLITaskRejectsUnsupportedActionsAndInvalidFlags(t *testing.T) {
 	for _, tc := range []struct {

@@ -535,7 +535,7 @@ class SchemaValidationTests(unittest.TestCase):
 
             def snapshot():
                 return {
-                    str(p.relative_to(target)): (
+                    p.relative_to(target).as_posix(): (
                         hashlib.sha256(p.read_bytes()).hexdigest() if p.is_file() else "directory"
                     )
                     for p in target.rglob("*")
@@ -585,11 +585,66 @@ class SchemaValidationTests(unittest.TestCase):
             self.assertEqual(review()["spec"]["disposition"], "READY_FOR_REVIEW")
             (target / "notes.txt").write_text("user changes", encoding="utf-8")
             self.assertEqual(review()["spec"]["disposition"], "READY_FOR_REVIEW")
+
+            def prepare(*extra):
+                intent_path.write_text(json.dumps(intent), encoding="utf-8")
+                before = snapshot()
+                result = run("task", "plan", "--prepare", "--target", str(target),
+                             "--intent", str(intent_path), *extra)
+                after = snapshot()
+                # Drafts may change only local Git metadata, never source files
+                # or the Git index. Existing immutable revisions are preserved.
+                self.assertEqual(
+                    {k: v for k, v in before.items() if k != ".git" and not k.startswith(".git/")},
+                    {k: v for k, v in after.items() if k != ".git" and not k.startswith(".git/")},
+                )
+                self.assertEqual(before[".git/index"], after[".git/index"])
+                self.assertFalse(result["changed"])
+                self.assertTrue(result["data"]["local_state_changed"])
+                self.assertIsNone(result["run_id"])
+                self.assertNotIn("approval_request", result["data"])
+                prepared = result["data"]["task_preparation"]
+                self.validate(prepared, "task-preparation.schema.json")
+                self.validate(prepared["spec"]["draft"], "task-draft.schema.json")
+                operation = prepared["spec"]["operations"][0]
+                self.assertEqual(
+                    hashlib.sha256(prepared["document"].encode("utf-8")).hexdigest(),
+                    operation["expected_sha256"],
+                )
+                self.assertFalse((target / "TASK.md").exists())
+                self.assertEqual(prepared["spec"]["review"]["validation_result"], "NOT_RUN")
+                return prepared
+
+            first = prepare()
+            self.assertIn("## 목표", first["document"])
+            self.assertRegex(first["spec"]["draft"]["task_id"], r"^T-\d{8}-[0-9A-HJKMNP-TV-Z]{8}$")
+            repeated = prepare()
+            self.assertEqual(first, repeated)
+            revisions = sorted((target / ".git/exord-init/task-drafts").glob("*/plans/*.json"))
+            self.assertEqual(len(revisions), 1)
+            original_bytes = revisions[0].read_bytes()
+            intent.update(language="en", title="revised task title")
+            revised = prepare()
+            self.assertEqual(first["spec"]["draft"], revised["spec"]["draft"])
+            self.assertNotEqual(first["spec_sha256"], revised["spec_sha256"])
+            self.assertIn("## Goal", revised["document"])
+            self.assertEqual(revisions[0].read_bytes(), original_bytes)
+            renamed = "feat/" + first["spec"]["draft"]["task_id"].lower() + "-renamed"
+            git("branch", "-m", renamed)
+            intent["work_branch"] = renamed
+            moved = prepare("--draft-id", first["spec"]["draft"]["draft_id"])
+            self.assertEqual(first["spec"]["draft"], moved["spec"]["draft"])
+            self.assertIn(renamed, moved["document"])
             (target / "TASK.md").write_text("user-owned task", encoding="utf-8")
             self.assertIn("EXISTING_TASK_CONFLICT", review()["spec"]["blockers"])
+            before = snapshot()
+            refused = run("task", "plan", "--prepare", "--target", str(target),
+                          "--intent", str(intent_path))
+            self.assertEqual(refused["status"], "BLOCKED")
+            self.assertEqual(snapshot(), before)
             run("task", "apply", "--target", str(target), expected=7)
             git("checkout", "main")
-            intent.update(work_branch="main", base_branch="feat/first-task")
+            intent.update(work_branch="main", base_branch=renamed)
             self.assertIn("INTEGRATION_BRANCH", review()["spec"]["blockers"])
 
 

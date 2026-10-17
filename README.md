@@ -8,7 +8,7 @@ It is designed for both individual vibe-coding projects and teams using OpenAI C
 
 The project itself is being developed through a vibe-coding workflow: a human directs product and safety decisions while AI coding agents help research, design, implement, review, and test the system. “Vibe-coded” does not mean unverified—the repository uses explicit contracts, plan-bound approval, automated tests, and human review to keep generated changes accountable.
 
-> Development status: **v0.5.0-dev development prototype**. There is no stable release or supported installer yet. The engine supports safe `CREATE + QUICK` apply, read-only `ADOPT + QUICK` and upgrade analysis, recovery, and read-only `task plan`. See [changes](CHANGELOG.md) and [version policy](docs/spec/versioning.md).
+> Development status: **v0.6.0-dev development prototype**. There is no stable release or supported installer yet. The engine supports safe `CREATE + QUICK` apply, read-only ADOPT/upgrade/Task review, local Task draft preparation, and CREATE recovery. See [changes](CHANGELOG.md) and [version policy](docs/spec/versioning.md).
 
 ## Why exord-init?
 
@@ -46,6 +46,7 @@ AI-assisted projects often accumulate framework choices, duplicated instructions
 | `CUSTOM`, `REINITIALIZE`, and ADOPT apply | Not implemented |
 | Task and Git analysis | Implemented for ADOPT; generation remains planned |
 | `task:plan` / `task plan` | Read-only TaskIntent, readiness and work-branch review; task generation/apply remain unsupported |
+| `task:prepare` / `task plan --prepare` | Stable Task ID and exact bilingual document preview in local Git metadata; no TASK.md publication or apply |
 | Commit, branch, remote, and push automation | Not implemented |
 | Product-specific plugin/extension packages | Not released |
 
@@ -263,6 +264,40 @@ No Task ID, files, staged bytes, approval request or local run state is created.
 `task apply`, worktree support and Task updates remain unsupported. Repeated
 review of unchanged input/state has the same spec hash and distinct plan IDs.
 The review hash is not a token accepted by CREATE apply or recovery.
+
+### Preserve a draft and exact document plan
+
+```sh
+./bin/exord-init task plan --prepare --intent ./task-intent.json --target ../my-project --json
+# Explicit reuse after a work-branch rename:
+./bin/exord-init task plan --prepare --draft-id <draft_uuid> --intent ./task-intent.json --target ../my-project --json
+```
+
+The explicit `--prepare` flag takes the project lock and writes only local
+`.git/exord-init/task-drafts/` metadata. `data.task_preparation` contains a stable
+draft UUID, `T-YYYYMMDD-XXXXXXXX` task ID, UTC creation time, exact UTF-8/LF
+document, one CREATE operation and hashes. `changed` describes project output
+(false); `data.local_state_changed` reports the metadata write. No approval
+request, CREATE run, tracked file or Git index change is made.
+
+The default draft is selected by project and original work branch. Repeat on
+that branch to reuse its identity, or pass the returned `draft_id` after a
+branch rename. The immutable identity records the original branch; each
+document/plan revision records the inspected branch. Identical plans reuse the
+saved revision; changed input/state preserves previous hash-named snapshots
+containing both plan and document. Preview `updated_at` uses draft creation day.
+New tasks on a previously used branch, draft disposal and date updates after
+actual task progress are not automated in this slice.
+
+Collision checks read other local branch names (up to 257), commit messages and
+Task patches (257 entries per pass, 8 MiB/5 seconds per Git query), up to 32
+worktree Task files, and 256 local draft identities. `collision_scan.limits`
+discloses partial coverage; history counts include entries from both passes,
+not unique commits. No fetch runs and remote-wide uniqueness is not guaranteed.
+Corrupt/conflicting local records stop preparation instead of being replaced.
+A failure may retain identity or temporary metadata; task-state cleanup is not
+automated. `recover list/discard` still handle CREATE runs only. Task apply and
+recovery remain unsupported; do not copy previews into the target as a substitute.
 
 ## Read-only upgrade analysis: `plan --upgrade`
 
